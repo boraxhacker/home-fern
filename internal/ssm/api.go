@@ -11,14 +11,14 @@ import (
 	awsssm "github.com/aws/aws-sdk-go-v2/service/ssm"
 )
 
-type ParameterApi struct {
-	service     *ParameterService
+type Api struct {
+	service     *Service
 	credentials *awslib.CredentialsProvider
 }
 
-func NewParameterApi(service *ParameterService, credentials *awslib.CredentialsProvider) *ParameterApi {
+func NewParameterApi(service *Service, credentials *awslib.CredentialsProvider) *Api {
 
-	return &ParameterApi{service: service, credentials: credentials}
+	return &Api{service: service, credentials: credentials}
 }
 
 /*
@@ -31,7 +31,7 @@ o get-parameters-by-path
 o put-parameter
 */
 
-func (api *ParameterApi) Handle(w http.ResponseWriter, r *http.Request) {
+func (api *Api) Handle(w http.ResponseWriter, r *http.Request) {
 
 	requestUser := r.Context().Value(awslib.RequestUser)
 	if requestUser == nil {
@@ -90,7 +90,7 @@ func (api *ParameterApi) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (api *ParameterApi) getParameter(w http.ResponseWriter, r *http.Request) {
+func (api *Api) getParameter(w http.ResponseWriter, r *http.Request) {
 
 	var request awsssm.GetParameterInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -108,7 +108,7 @@ func (api *ParameterApi) getParameter(w http.ResponseWriter, r *http.Request) {
 	awslib.WriteSuccessResponseJSON(w, response)
 }
 
-func (api *ParameterApi) getParameters(w http.ResponseWriter, r *http.Request) {
+func (api *Api) getParameters(w http.ResponseWriter, r *http.Request) {
 
 	var request awsssm.GetParametersInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -127,7 +127,7 @@ func (api *ParameterApi) getParameters(w http.ResponseWriter, r *http.Request) {
 	awslib.WriteSuccessResponseJSON(w, response)
 }
 
-func (api *ParameterApi) getParametersByPath(w http.ResponseWriter, r *http.Request) {
+func (api *Api) getParametersByPath(w http.ResponseWriter, r *http.Request) {
 
 	var request awsssm.GetParametersByPathInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -146,7 +146,7 @@ func (api *ParameterApi) getParametersByPath(w http.ResponseWriter, r *http.Requ
 	awslib.WriteSuccessResponseJSON(w, response)
 }
 
-func (api *ParameterApi) describeParameters(w http.ResponseWriter, r *http.Request) {
+func (api *Api) describeParameters(w http.ResponseWriter, r *http.Request) {
 
 	var request awsssm.DescribeParametersInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -165,7 +165,7 @@ func (api *ParameterApi) describeParameters(w http.ResponseWriter, r *http.Reque
 	awslib.WriteSuccessResponseJSON(w, response)
 }
 
-func (api *ParameterApi) deleteParameter(w http.ResponseWriter, r *http.Request) {
+func (api *Api) deleteParameter(w http.ResponseWriter, r *http.Request) {
 
 	var request awsssm.DeleteParameterInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -184,7 +184,7 @@ func (api *ParameterApi) deleteParameter(w http.ResponseWriter, r *http.Request)
 	awslib.WriteSuccessResponseJSON(w, response)
 }
 
-func (api *ParameterApi) deleteParameters(w http.ResponseWriter, r *http.Request) {
+func (api *Api) deleteParameters(w http.ResponseWriter, r *http.Request) {
 
 	var request awsssm.DeleteParametersInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -204,7 +204,7 @@ func (api *ParameterApi) deleteParameters(w http.ResponseWriter, r *http.Request
 
 }
 
-func (api *ParameterApi) putParameter(creds *aws.Credentials, w http.ResponseWriter, r *http.Request) {
+func (api *Api) putParameter(creds *aws.Credentials, w http.ResponseWriter, r *http.Request) {
 
 	var request awsssm.PutParameterInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -223,7 +223,7 @@ func (api *ParameterApi) putParameter(creds *aws.Credentials, w http.ResponseWri
 	awslib.WriteSuccessResponseJSON(w, response)
 }
 
-func (api *ParameterApi) addTagsToResource(w http.ResponseWriter, r *http.Request) {
+func (api *Api) addTagsToResource(w http.ResponseWriter, r *http.Request) {
 
 	var request awsssm.AddTagsToResourceInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -242,7 +242,7 @@ func (api *ParameterApi) addTagsToResource(w http.ResponseWriter, r *http.Reques
 	awslib.WriteSuccessResponseJSON(w, response)
 }
 
-func (api *ParameterApi) removeTagsFromResource(w http.ResponseWriter, r *http.Request) {
+func (api *Api) removeTagsFromResource(w http.ResponseWriter, r *http.Request) {
 
 	var request awsssm.RemoveTagsFromResourceInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -261,7 +261,7 @@ func (api *ParameterApi) removeTagsFromResource(w http.ResponseWriter, r *http.R
 	awslib.WriteSuccessResponseJSON(w, response)
 }
 
-func (api *ParameterApi) listTagsForResource(w http.ResponseWriter, r *http.Request) {
+func (api *Api) listTagsForResource(w http.ResponseWriter, r *http.Request) {
 
 	var request awsssm.ListTagsForResourceInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {

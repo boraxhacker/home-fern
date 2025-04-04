@@ -11,18 +11,18 @@ import (
 	awstypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 )
 
-type ParameterService struct {
+type Service struct {
 	dataStore *dataStore
 	accountId string
 	region    string
 }
 
-func NewParameterService(fernConfig *core.FernConfig, accountId string, dataPath string) *ParameterService {
+func NewService(fernConfig *core.FernConfig, accountId string, dataPath string) *Service {
 
 	databasePath := dataPath + "/ssm"
 	dataStore := newDataStore(databasePath, fernConfig.Keys)
 
-	result := ParameterService{
+	result := Service{
 		region:    fernConfig.Region,
 		accountId: accountId,
 		dataStore: dataStore,
@@ -31,14 +31,14 @@ func NewParameterService(fernConfig *core.FernConfig, accountId string, dataPath
 	return &result
 }
 
-func (service *ParameterService) Close() {
+func (service *Service) Close() {
 
 	if service.dataStore != nil {
 		service.dataStore.Close()
 	}
 }
 
-func (service *ParameterService) DeleteParameter(
+func (service *Service) DeleteParameter(
 	request *awsssm.DeleteParameterInput) (*awsssm.DeleteParameterOutput, ErrorCode) {
 
 	paramName, err := NewParamName(request.Name)
@@ -54,7 +54,7 @@ func (service *ParameterService) DeleteParameter(
 	return &awsssm.DeleteParameterOutput{}, ErrNone
 }
 
-func (service *ParameterService) DeleteParameters(
+func (service *Service) DeleteParameters(
 	request *awsssm.DeleteParametersInput) (*awsssm.DeleteParametersOutput, ErrorCode) {
 
 	var response awsssm.DeleteParametersOutput
@@ -82,7 +82,7 @@ func (service *ParameterService) DeleteParameters(
 	return &response, ErrNone
 }
 
-func (service *ParameterService) DescribeParameters(
+func (service *Service) DescribeParameters(
 	request *awsssm.DescribeParametersInput) (*DescribeParametersResponse, ErrorCode) {
 
 	// TODO incomplete implementation
@@ -153,7 +153,7 @@ func (service *ParameterService) DescribeParameters(
 	return &response, ErrNone
 }
 
-func (service *ParameterService) GetParameter(
+func (service *Service) GetParameter(
 	request *awsssm.GetParameterInput) (*GetParameterResponse, ErrorCode) {
 
 	result, err := service.getParameterByName(
@@ -169,7 +169,7 @@ func (service *ParameterService) GetParameter(
 	return &response, ErrNone
 }
 
-func (service *ParameterService) GetParameters(
+func (service *Service) GetParameters(
 	request *awsssm.GetParametersInput) (*GetParametersResponse, ErrorCode) {
 
 	var response GetParametersResponse
@@ -187,7 +187,7 @@ func (service *ParameterService) GetParameters(
 	return &response, ErrNone
 }
 
-func (service *ParameterService) GetParametersByPath(
+func (service *Service) GetParametersByPath(
 	request *awsssm.GetParametersByPathInput) (*GetParametersByPathResponse, ErrorCode) {
 
 	// TODO incomplete implementation
@@ -237,7 +237,7 @@ func (service *ParameterService) GetParametersByPath(
 	return &response, ErrNone
 }
 
-func (service *ParameterService) PutParameter(
+func (service *Service) PutParameter(
 	creds *aws.Credentials, request *awsssm.PutParameterInput) (*awsssm.PutParameterOutput, ErrorCode) {
 
 	param, err := NewParameterData(request)
@@ -270,7 +270,7 @@ func (service *ParameterService) PutParameter(
 	return &awsssm.PutParameterOutput{Tier: awstypes.ParameterTierStandard, Version: newVersion}, ErrNone
 }
 
-func (service *ParameterService) AddTagsToResource(
+func (service *Service) AddTagsToResource(
 	request *awsssm.AddTagsToResourceInput) (*awsssm.AddTagsToResourceOutput, ErrorCode) {
 
 	var response awsssm.AddTagsToResourceOutput
@@ -310,7 +310,7 @@ func (service *ParameterService) AddTagsToResource(
 	return &response, ErrNone
 }
 
-func (service *ParameterService) RemoveTagsFromResource(
+func (service *Service) RemoveTagsFromResource(
 	request *awsssm.RemoveTagsFromResourceInput) (*awsssm.RemoveTagsFromResourceOutput, ErrorCode) {
 
 	var response awsssm.RemoveTagsFromResourceOutput
@@ -341,7 +341,7 @@ func (service *ParameterService) RemoveTagsFromResource(
 	return &response, ErrNone
 }
 
-func (service *ParameterService) ListTagsForResource(
+func (service *Service) ListTagsForResource(
 	request *awsssm.ListTagsForResourceInput) (*awsssm.ListTagsForResourceOutput, ErrorCode) {
 
 	var response awsssm.ListTagsForResourceOutput
@@ -362,12 +362,12 @@ func (service *ParameterService) ListTagsForResource(
 	return &response, ErrNone
 }
 
-func (service *ParameterService) createUserArn(creds *aws.Credentials) string {
+func (service *Service) createUserArn(creds *aws.Credentials) string {
 
 	return fmt.Sprintf("arn:aws:iam::%s:user/%s", service.accountId, creds.Source)
 }
 
-func (service *ParameterService) getParameterByName(name string, withDecryption bool) (*ParameterData, ErrorCode) {
+func (service *Service) getParameterByName(name string, withDecryption bool) (*ParameterData, ErrorCode) {
 
 	paramName, err := NewParamName(&name)
 	if err != ErrNone {
@@ -395,7 +395,7 @@ func (service *ParameterService) getParameterByName(name string, withDecryption 
 	return result, ErrNone
 }
 
-func (service *ParameterService) createParameterArn(name ParamName) string {
+func (service *Service) createParameterArn(name ParamName) string {
 
 	return fmt.Sprintf("arn:aws:ssm:%s:%s:parameter/%s",
 		service.region, service.accountId, strings.TrimPrefix(string(name), "/"))

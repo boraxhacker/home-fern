@@ -40,6 +40,7 @@ const (
 	yyyymmdd        = "20060102"
 	SlashSeparator  = "/"
 	RequestUser     = "x-request-user"
+	RequestCommand  = "x-request-command"
 )
 
 type ServiceType string
