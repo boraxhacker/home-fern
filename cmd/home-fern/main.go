@@ -17,8 +17,10 @@ import (
 
 func main() {
 
-	configFilePtr := flag.String("config", ".home-fern-config.yaml", "Path to the home-fern config file.")
-	dataPathPtr := flag.String("data-path", ".home-fern-data", "Path to data store folder.")
+	configFilePtr :=
+		flag.String("config", ".home-fern-config.yaml", "Path to the home-fern config file.")
+	dataPathPtr :=
+		flag.String("data-path", ".home-fern-data", "Path to data store folder.")
 	flag.Parse()
 
 	fernConfig := readAuthCredsOrDie(*configFilePtr)
@@ -35,11 +37,15 @@ func main() {
 	}
 	credentialsProvider := awslib.NewCredentialsProvider(awslib.ServiceSsm, fernConfig.Region, credentials)
 
-	service := ssm.NewService(fernConfig, core.ZeroAccountId, *dataPathPtr)
-	defer service.Close()
+	ssmsvc := ssm.NewService(fernConfig, core.ZeroAccountId, *dataPathPtr)
+	defer ssmsvc.Close()
 
-	ssmApi := ssm.NewParameterApi(service, credentialsProvider)
-	route53Api := route53.NewRoute53Api(credentialsProvider)
+	ssmApi := ssm.NewParameterApi(ssmsvc, credentialsProvider)
+
+	r53svc := route53.NewService(*dataPathPtr)
+	defer r53svc.Close()
+
+	route53Api := route53.NewRoute53Api(r53svc, credentialsProvider)
 
 	basicProvider := core.NewBasicCredentialsProvider(fernConfig.Credentials)
 

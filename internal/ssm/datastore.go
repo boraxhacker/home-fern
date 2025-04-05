@@ -41,22 +41,20 @@ func (ds *dataStore) Close() {
 	}
 }
 
-func (ds *dataStore) delete(key string) ErrorCode {
+func (ds *dataStore) delete(key string) core.ErrorCode {
 
-	err := ds.db.Update(
-		func(txn *badger.Txn) error {
-			return txn.Delete([]byte(key))
-		})
+	keys := []string{key}
+	err := core.DeleteKeys(ds.db, keys)
 
 	if err != nil {
 
 		return translateBadgerError(err)
 	}
 
-	return ErrNone
+	return core.ErrNone
 }
 
-func (ds *dataStore) findParametersByKey(filters []string) ([]ParameterData, ErrorCode) {
+func (ds *dataStore) findParametersByKey(filters []string) ([]ParameterData, core.ErrorCode) {
 
 	var result []ParameterData
 
@@ -100,10 +98,10 @@ func (ds *dataStore) findParametersByKey(filters []string) ([]ParameterData, Err
 		return nil, translateBadgerError(err)
 	}
 
-	return result, ErrNone
+	return result, core.ErrNone
 }
 
-func (ds *dataStore) getParameter(key string) (*ParameterData, ErrorCode) {
+func (ds *dataStore) getParameter(key string) (*ParameterData, core.ErrorCode) {
 
 	var param ParameterData
 
@@ -124,10 +122,10 @@ func (ds *dataStore) getParameter(key string) (*ParameterData, ErrorCode) {
 		return nil, translateBadgerError(err)
 	}
 
-	return &param, ErrNone
+	return &param, core.ErrNone
 }
 
-func (ds *dataStore) putParameter(key string, value *ParameterData, overwrite bool) (int64, ErrorCode) {
+func (ds *dataStore) putParameter(key string, value *ParameterData, overwrite bool) (int64, core.ErrorCode) {
 
 	var newVersion int64 = 1
 	var existingParam ParameterData
@@ -169,10 +167,10 @@ func (ds *dataStore) putParameter(key string, value *ParameterData, overwrite bo
 		return -1, translateBadgerError(err)
 	}
 
-	return newVersion, ErrNone
+	return newVersion, core.ErrNone
 }
 
-func (ds *dataStore) findKeyId(keyId string) ([]byte, ErrorCode) {
+func (ds *dataStore) findKeyId(keyId string) ([]byte, core.ErrorCode) {
 
 	// TODO doesn't handle ARNs
 	for _, key := range ds.keys {
@@ -181,20 +179,20 @@ func (ds *dataStore) findKeyId(keyId string) ([]byte, ErrorCode) {
 
 			bytes, err := base64.StdEncoding.DecodeString(key.Key)
 			if err != nil {
-				return nil, ErrInternalError
+				return nil, core.ErrInternalError
 			}
 
-			return bytes, ErrNone
+			return bytes, core.ErrNone
 		}
 	}
 
 	return nil, ErrInvalidKeyId
 }
 
-func (ds *dataStore) encrypt(stringToEncrypt string, keyId string) (string, ErrorCode) {
+func (ds *dataStore) encrypt(stringToEncrypt string, keyId string) (string, core.ErrorCode) {
 
 	key, ec := ds.findKeyId(keyId)
-	if ec != ErrNone {
+	if ec != core.ErrNone {
 		return "", ec
 	}
 
@@ -220,13 +218,13 @@ func (ds *dataStore) encrypt(stringToEncrypt string, keyId string) (string, Erro
 
 	// Encrypt the data using aesGCM.Seal. Since we don't want to save the nonce somewhere else in this case, we add it as a prefix to the encrypted data. The first nonce argument in Seal is the prefix.
 	ciphertext := aesGCM.Seal(nonce, nonce, []byte(stringToEncrypt), nil)
-	return base64.StdEncoding.EncodeToString(ciphertext), ErrNone
+	return base64.StdEncoding.EncodeToString(ciphertext), core.ErrNone
 }
 
-func (ds *dataStore) decrypt(encryptedString string, keyId string) (string, ErrorCode) {
+func (ds *dataStore) decrypt(encryptedString string, keyId string) (string, core.ErrorCode) {
 
 	key, ec := ds.findKeyId(keyId)
-	if ec != ErrNone {
+	if ec != core.ErrNone {
 		return "", ec
 	}
 
@@ -254,10 +252,10 @@ func (ds *dataStore) decrypt(encryptedString string, keyId string) (string, Erro
 		return "", translateBadgerError(err)
 	}
 
-	return string(plaintext), ErrNone
+	return string(plaintext), core.ErrNone
 }
 
-func translateBadgerError(err error) ErrorCode {
+func translateBadgerError(err error) core.ErrorCode {
 
 	if errors.Is(err, badger.ErrKeyNotFound) {
 		return ErrParameterNotFound
@@ -266,5 +264,5 @@ func translateBadgerError(err error) ErrorCode {
 	}
 
 	log.Println("An error occurred.", err)
-	return ErrInternalError
+	return core.ErrInternalError
 }

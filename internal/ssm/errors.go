@@ -2,16 +2,13 @@ package ssm
 
 import (
 	"home-fern/internal/awslib"
+	"home-fern/internal/core"
 	"net/http"
 )
 
-type ErrorCode int
-
 const (
-	ErrNone ErrorCode = iota
-	ErrParameterNotFound
+	ErrParameterNotFound core.ErrorCode = iota + 1000
 	ErrParameterAlreadyExists
-	ErrInternalError
 	ErrInvalidKeyId
 	ErrInvalidName
 	ErrInvalidTier
@@ -23,10 +20,10 @@ const (
 	ErrInvalidPath
 )
 
-type errorCodeMap map[ErrorCode]awslib.ApiError
+type errorCodeMap map[core.ErrorCode]awslib.ApiError
 
 var ErrorCodes = errorCodeMap{
-	ErrInternalError: {
+	core.ErrInternalError: {
 		Code:           "InternalError",
 		Description:    "We encountered an internal error, please try again.",
 		HTTPStatusCode: http.StatusInternalServerError,
@@ -88,7 +85,7 @@ var ErrorCodes = errorCodeMap{
 	},
 }
 
-func translateToApiError(ec ErrorCode) awslib.ApiError {
+func translateToApiError(ec core.ErrorCode) awslib.ApiError {
 
 	value, ok := ErrorCodes[ec]
 	if ok {

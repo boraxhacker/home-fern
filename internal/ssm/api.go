@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"home-fern/internal/awslib"
+	"home-fern/internal/core"
 	"log"
 	"net/http"
 
@@ -99,7 +100,7 @@ func (api *Api) getParameter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.GetParameter(&request)
-	if err != ErrNone {
+	if err != core.ErrNone {
 		log.Println("Error:", err)
 		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
 		return
@@ -117,7 +118,7 @@ func (api *Api) getParameters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.GetParameters(&request)
-	if err != ErrNone {
+	if err != core.ErrNone {
 
 		log.Println("Error:", err)
 		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
@@ -136,7 +137,7 @@ func (api *Api) getParametersByPath(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.GetParametersByPath(&request)
-	if err != ErrNone {
+	if err != core.ErrNone {
 
 		log.Println("Error:", err)
 		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
@@ -155,7 +156,7 @@ func (api *Api) describeParameters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.DescribeParameters(&request)
-	if err != ErrNone {
+	if err != core.ErrNone {
 
 		log.Println("Error:", err)
 		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
@@ -174,7 +175,7 @@ func (api *Api) deleteParameter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.DeleteParameter(&request)
-	if err != ErrNone {
+	if err != core.ErrNone {
 
 		log.Println("Error:", err)
 		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
@@ -193,7 +194,7 @@ func (api *Api) deleteParameters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.DeleteParameters(&request)
-	if err != ErrNone {
+	if err != core.ErrNone {
 
 		log.Println("Error:", err)
 		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
@@ -213,7 +214,7 @@ func (api *Api) putParameter(creds *aws.Credentials, w http.ResponseWriter, r *h
 	}
 
 	response, err := api.service.PutParameter(creds, &request)
-	if err != ErrNone {
+	if err != core.ErrNone {
 
 		log.Println("Error:", err)
 		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
@@ -232,7 +233,7 @@ func (api *Api) addTagsToResource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.AddTagsToResource(&request)
-	if err != ErrNone {
+	if err != core.ErrNone {
 
 		log.Println("Error:", err)
 		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
@@ -251,7 +252,7 @@ func (api *Api) removeTagsFromResource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.RemoveTagsFromResource(&request)
-	if err != ErrNone {
+	if err != core.ErrNone {
 
 		log.Println("Error:", err)
 		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
@@ -270,7 +271,7 @@ func (api *Api) listTagsForResource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.ListTagsForResource(&request)
-	if err != ErrNone {
+	if err != core.ErrNone {
 
 		log.Println("Error:", err)
 		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
