@@ -35,17 +35,19 @@ func main() {
 			AccountID:       core.ZeroAccountId,
 		})
 	}
-	credentialsProvider := awslib.NewCredentialsProvider(awslib.ServiceSsm, fernConfig.Region, credentials)
+	ssmCredentials := awslib.NewCredentialsProvider(awslib.ServiceSsm, fernConfig.Region, credentials)
 
 	ssmsvc := ssm.NewService(fernConfig, core.ZeroAccountId, *dataPathPtr)
 	defer ssmsvc.Close()
 
-	ssmApi := ssm.NewParameterApi(ssmsvc, credentialsProvider)
+	ssmApi := ssm.NewParameterApi(ssmsvc, ssmCredentials)
 
 	r53svc := route53.NewService(*dataPathPtr)
 	defer r53svc.Close()
 
-	route53Api := route53.NewRoute53Api(r53svc, credentialsProvider)
+	route53Credentials := awslib.NewCredentialsProvider(awslib.ServiceRoute53, fernConfig.Region, credentials)
+
+	route53Api := route53.NewRoute53Api(r53svc, route53Credentials)
 
 	basicProvider := core.NewBasicCredentialsProvider(fernConfig.Credentials)
 
@@ -55,22 +57,32 @@ func main() {
 
 	// SSM
 	router.HandleFunc("/ssm",
-		credentialsProvider.WithSigV4(ssmApi.Handle)).Methods("POST")
+		ssmCredentials.WithSigV4(ssmApi.Handle)).Methods("POST")
 
 	// Route53
 	router.HandleFunc("/route53/2013-04-01/hostedzone",
-		credentialsProvider.WithSigV4(route53Api.CreateHostedZone)).Methods("POST")
+		route53Credentials.WithSigV4(route53Api.CreateHostedZone)).Methods("POST")
 	router.HandleFunc("/route53/2013-04-01/hostedzone",
-		credentialsProvider.WithSigV4(route53Api.ListHostedZones)).Methods("GET")
+		route53Credentials.WithSigV4(route53Api.ListHostedZones)).Methods("GET")
+	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
+		route53Credentials.WithSigV4(route53Api.DeleteHostedZone)).Methods("DELETE")
+	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
+		route53Credentials.WithSigV4(route53Api.GetHostedZone)).Methods("GET")
+	router.HandleFunc("/route53/2013-04-01/hostedzonecount",
+		route53Credentials.WithSigV4(route53Api.GetHostedZoneCount)).Methods("GET")
+	router.HandleFunc("/route53/2013-04-01/change/{id}",
+		route53Credentials.WithSigV4(route53Api.GetChange)).Methods("GET")
+	router.HandleFunc("/route53/2013-04-01/tags/{resourceType}/{resourceId}",
+		route53Credentials.WithSigV4(route53Api.ListTagsForResource)).Methods("GET")
+	router.HandleFunc("/route53/2013-04-01/tags/{resourceType}/{resourceId}",
+		route53Credentials.WithSigV4(route53Api.ChangeTagsForResource)).Methods("POST")
+	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
+		route53Credentials.WithSigV4(route53Api.UpdateHostedZoneComment)).Methods("POST")
 
-	//router.HandleFunc("/route53/2013-04-01/change/{id}",
-	//	credentialsProvider.WithSigV4(route53Api.GetChange)).Methods("GET")
+	//router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset",
+	//	credentialsProvider.WithSigV4(route53Api.ListRecordSets)).Methods("GET")
 	//router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset",
 	//	credentialsProvider.WithSigV4(route53Api.ChangeRecordSets)).Methods("POST")
-	//router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
-	//	credentialsProvider.WithSigV4(route53Api.GetHostedZone)).Methods("GET")
-	//router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
-	//	credentialsProvider.WithSigV4(route53Api.DeleteHostedZone)).Methods("DELETE")
 
 	// TF State
 	router.HandleFunc("/tfstate/{project}",

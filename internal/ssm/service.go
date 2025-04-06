@@ -297,7 +297,7 @@ func (service *Service) AddTagsToResource(
 			if !found {
 
 				param.Tags = append(param.Tags,
-					ResourceTag{Key: tagName, Value: aws.ToString(tag.Value)})
+					core.ResourceTag{Key: tagName, Value: aws.ToString(tag.Value)})
 			}
 		}
 

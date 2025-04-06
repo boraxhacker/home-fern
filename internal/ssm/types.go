@@ -79,11 +79,6 @@ func (p ParamPath) asOneLevelRegex() string {
 	return "^" + string(path) + "/[^/]+$"
 }
 
-type ResourceTag struct {
-	Key   string
-	Value string
-}
-
 type ParameterData struct {
 	AllowedPattern   string
 	DataType         string
@@ -93,7 +88,7 @@ type ParameterData struct {
 	LastModifiedUser string
 	Name             ParamName
 	Policies         string
-	Tags             []ResourceTag
+	Tags             []core.ResourceTag
 	Tier             awstypes.ParameterTier
 	Type             awstypes.ParameterType
 	Value            string
@@ -150,7 +145,7 @@ func NewParameterData(request *awsssm.PutParameterInput) (*ParameterData, core.E
 
 	for _, tag := range request.Tags {
 		result.Tags = append(result.Tags,
-			ResourceTag{Key: aws.ToString(tag.Key), Value: aws.ToString(tag.Value)})
+			core.ResourceTag{Key: aws.ToString(tag.Key), Value: aws.ToString(tag.Value)})
 	}
 
 	return &result, core.ErrNone

@@ -40,7 +40,6 @@ const (
 	yyyymmdd        = "20060102"
 	SlashSeparator  = "/"
 	RequestUser     = "x-request-user"
-	RequestCommand  = "x-request-command"
 )
 
 type ServiceType string
@@ -56,10 +55,10 @@ type CredentialsProvider struct {
 	credentials map[string]aws.Credentials
 }
 
-func NewCredentialsProvider(service ServiceType, region string, credentials []aws.Credentials) *CredentialsProvider {
+func NewCredentialsProvider(services ServiceType, region string, credentials []aws.Credentials) *CredentialsProvider {
 
 	result := CredentialsProvider{
-		Service:     service,
+		Service:     services,
 		Region:      region,
 		credentials: make(map[string]aws.Credentials),
 	}
@@ -84,6 +83,7 @@ func (p *CredentialsProvider) WithSigV4(next http.HandlerFunc) http.HandlerFunc 
 
 		accessKey, err := p.checkV4Sig(r)
 		if err.Code != "" {
+			log.Println("V4Sig Failed", err)
 			WriteErrorResponseJSON(w, err, r.URL, p.Region)
 			return
 		}
@@ -454,7 +454,7 @@ func parseCredentialHeader(credElement string, region string, stype ServiceType)
 		return ch, ErrAuthorizationHeaderMalformed
 	}
 	if credElements[2] != string(stype) {
-		return ch, ErrInvalidServiceSSM
+		return ch, ErrInvalidService
 	}
 	cred.scope.service = credElements[2]
 	if credElements[3] != "aws4_request" {

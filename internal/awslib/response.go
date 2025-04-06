@@ -5,6 +5,7 @@ package awslib
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"log"
 	"net/http"
 	"net/url"
@@ -19,6 +20,7 @@ const (
 	mimeNone mimeType = ""
 	// Means response type is JSON.
 	mimeJSON mimeType = "application/json"
+	mimeXML  mimeType = "application/xml"
 )
 
 // getErrorResponse gets in standard error and resource value and
@@ -44,6 +46,14 @@ func WriteSuccessResponseJSON(w http.ResponseWriter, response interface{}) {
 	writeResponse(w, http.StatusOK, encodedResponse, mimeJSON)
 }
 
+func WriteSuccessResponseXML(w http.ResponseWriter, response interface{}) {
+
+	encodedResponse := encodeResponseXML(response)
+	// log.Println("Response", string(encodedResponse))
+
+	writeResponse(w, http.StatusOK, encodedResponse, mimeXML)
+}
+
 // WriteErrorResponseJSON  - writes error response in JSON format;
 // useful for admin APIs.
 func WriteErrorResponseJSON(w http.ResponseWriter, err ApiError, reqURL *url.URL, region string) {
@@ -54,6 +64,38 @@ func WriteErrorResponseJSON(w http.ResponseWriter, err ApiError, reqURL *url.URL
 
 	encodedErrorResponse := encodeResponseJSON(errorResponse)
 	writeResponse(w, err.HTTPStatusCode, encodedErrorResponse, mimeJSON)
+}
+
+func WriteErrorResponseXML(w http.ResponseWriter, err ApiError, reqURL *url.URL, region string) {
+
+	// Generate error response.
+	resp := createAPIErrorResponse(err, reqURL.Path,
+		w.Header().Get(headerAmzRequestID), w.Header().Get(headerAmzRequestHostID), region)
+
+	encodedErrorResponse := encodeResponseXML(struct {
+		XMLName xml.Name `xml:"ErrorResponse"`
+		Error   struct {
+			Type    string
+			Code    string
+			Message string
+		}
+		RequestId string
+		HostId    string
+	}{
+		Error: struct {
+			Type    string
+			Code    string
+			Message string
+		}{
+			Type:    "Sender",
+			Code:    resp.Code,
+			Message: resp.Message,
+		},
+		RequestId: resp.RequestID,
+		HostId:    resp.HostID,
+	})
+
+	writeResponse(w, err.HTTPStatusCode, encodedErrorResponse, mimeXML)
 }
 
 func writeResponse(w http.ResponseWriter, statusCode int, response []byte, mType mimeType) {
@@ -67,7 +109,7 @@ func writeResponse(w http.ResponseWriter, statusCode int, response []byte, mType
 	}
 	w.WriteHeader(statusCode)
 
-	w.Header().Set(headerServerInfo, "Home-SSM")
+	w.Header().Set(headerServerInfo, "home-fern")
 	w.Header().Set(headerAcceptRanges, "bytes")
 	if mType != mimeNone {
 		w.Header().Set(headerContentType, string(mType))
@@ -84,6 +126,17 @@ func encodeResponseJSON(response interface{}) []byte {
 
 	var bytesBuffer bytes.Buffer
 	e := json.NewEncoder(&bytesBuffer)
+	e.Encode(response)
+	return bytesBuffer.Bytes()
+}
+
+func encodeResponseXML(response interface{}) []byte {
+
+	var bytesBuffer bytes.Buffer
+
+	bytesBuffer.Write([]byte(xml.Header))
+
+	e := xml.NewEncoder(&bytesBuffer)
 	e.Encode(response)
 	return bytesBuffer.Bytes()
 }

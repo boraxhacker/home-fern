@@ -2,3 +2,6 @@
 /home-fern
 /.home-fern-config.yaml
 /.home-fern-data
+
+.terraform
+.terraform.lock.hcl

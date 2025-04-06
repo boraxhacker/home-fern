@@ -18,6 +18,11 @@ type KmsKey struct {
 	Key   string `yaml:"key"`
 }
 
+type ResourceTag struct {
+	Key   string
+	Value string
+}
+
 const (
 	ZeroAccountId string = "000000000000"
 )
