@@ -26,6 +26,77 @@ func NewRoute53Api(service *Service, credentials *awslib.CredentialsProvider) *A
 	}
 }
 
+func (api *Api) ChangeResourceRecordSets(w http.ResponseWriter, r *http.Request) {
+
+	log.Println("Amazon-Target: Route53.ChangeResourceRecordSets")
+
+	var request ChangeResourceRecordSetsRequest
+
+	if err := xml.NewDecoder(r.Body).Decode(&request); err != nil {
+		log.Println("Error:", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	vars := mux.Vars(r)
+	request.HostedZoneId = vars["id"]
+
+	response, err := api.service.ChangeResourceRecordSets(&request)
+	if err != core.ErrNone {
+		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+		return
+	}
+
+	awslib.WriteSuccessResponseXML(w, struct {
+		XMLName xml.Name `xml:"ChangeResourceRecordSetsResponse"`
+		*aws53.ChangeResourceRecordSetsOutput
+	}{
+		ChangeResourceRecordSetsOutput: response,
+	})
+}
+
+func (api *Api) ChangeTagsForResource(w http.ResponseWriter, r *http.Request) {
+
+	log.Println("Amazon-Target: Route53.ChangeTagsForResource")
+
+	type ChangeTagsWrapper struct {
+		XMLName       xml.Name       `xml:"ChangeTagsForResourceRequest"`
+		AddTags       []awstypes.Tag `xml:"AddTags>Tag"`
+		RemoveTagKeys []string       `xml:"RemoveTagKeys>Key"`
+	}
+
+	var changetags ChangeTagsWrapper
+
+	if err := xml.NewDecoder(r.Body).Decode(&changetags); err != nil {
+		log.Println("Error:", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Parsing the path parameters
+	vars := mux.Vars(r)
+
+	request := aws53.ChangeTagsForResourceInput{
+		ResourceId:    aws.String(vars["resourceId"]),
+		ResourceType:  awstypes.TagResourceType(vars["resourceType"]),
+		AddTags:       changetags.AddTags,
+		RemoveTagKeys: changetags.RemoveTagKeys,
+	}
+
+	response, err := api.service.ChangeTagsForResource(&request)
+	if err != core.ErrNone {
+		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+		return
+	}
+
+	awslib.WriteSuccessResponseXML(w, struct {
+		XMLName xml.Name `xml:"ChangeTagsForResourceResponse"`
+		*aws53.ChangeTagsForResourceOutput
+	}{
+		ChangeTagsForResourceOutput: response,
+	})
+}
+
 func (api *Api) CreateHostedZone(w http.ResponseWriter, r *http.Request) {
 
 	log.Println("Amazon-Target: Route53.CreateHostedZone")
@@ -74,26 +145,6 @@ func (api *Api) DeleteHostedZone(w http.ResponseWriter, r *http.Request) {
 		*aws53.DeleteHostedZoneOutput
 	}{
 		DeleteHostedZoneOutput: response,
-	})
-}
-
-func (api *Api) GetHostedZoneCount(w http.ResponseWriter, r *http.Request) {
-
-	// GET /2013-04-01/hostedzonecount
-
-	log.Println("Amazon-Target: Route53.GetHostedZoneCount")
-
-	response, err := api.service.GetHostedZoneCount()
-	if err != core.ErrNone {
-		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
-		return
-	}
-
-	awslib.WriteSuccessResponseXML(w, struct {
-		XMLName xml.Name `xml:"GetHostedZoneCountResponse"`
-		*aws53.GetHostedZoneCountOutput
-	}{
-		GetHostedZoneCountOutput: response,
 	})
 }
 
@@ -161,6 +212,26 @@ func (api *Api) GetHostedZone(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (api *Api) GetHostedZoneCount(w http.ResponseWriter, r *http.Request) {
+
+	// GET /2013-04-01/hostedzonecount
+
+	log.Println("Amazon-Target: Route53.GetHostedZoneCount")
+
+	response, err := api.service.GetHostedZoneCount()
+	if err != core.ErrNone {
+		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+		return
+	}
+
+	awslib.WriteSuccessResponseXML(w, struct {
+		XMLName xml.Name `xml:"GetHostedZoneCountResponse"`
+		*aws53.GetHostedZoneCountOutput
+	}{
+		GetHostedZoneCountOutput: response,
+	})
+}
+
 func (api *Api) ListHostedZones(w http.ResponseWriter, r *http.Request) {
 
 	// GET /2013-04-01/hostedzone?delegationsetid=DelegationSetId&hostedzonetype=HostedZoneType&marker=Marker&maxitems=MaxItems
@@ -202,44 +273,28 @@ func (api *Api) ListHostedZones(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (api *Api) ChangeTagsForResource(w http.ResponseWriter, r *http.Request) {
+func (api *Api) ListResourceRecordSets(w http.ResponseWriter, r *http.Request) {
 
-	log.Println("Amazon-Target: Route53.ChangeTagsForResource")
+	log.Println("Amazon-Target: Route53.ListResourceRecordSets")
 
-	type ChangeTagsWrapper struct {
-		AddTags       []awstypes.Tag `xml:"AddTags>Tag"`
-		RemoveTagKeys []string       `xml:"RemoveTagKeys>Key"`
-	}
+	var request aws53.ListResourceRecordSetsInput
 
-	var changetags ChangeTagsWrapper
-
-	if err := xml.NewDecoder(r.Body).Decode(&changetags); err != nil {
-		log.Println("Error:", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Parsing the path parameters
 	vars := mux.Vars(r)
+	request.HostedZoneId = aws.String(vars["id"])
 
-	request := aws53.ChangeTagsForResourceInput{
-		ResourceId:    aws.String(vars["resourceId"]),
-		ResourceType:  awstypes.TagResourceType(vars["resourceType"]),
-		AddTags:       changetags.AddTags,
-		RemoveTagKeys: changetags.RemoveTagKeys,
-	}
-
-	response, err := api.service.ChangeTagsForResource(&request)
+	response, err := api.service.ListResourceRecordSets(&request)
 	if err != core.ErrNone {
 		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
 		return
 	}
 
 	awslib.WriteSuccessResponseXML(w, struct {
-		XMLName xml.Name `xml:"ChangeTagsForResourceResponse"`
-		*aws53.ChangeTagsForResourceOutput
+		XMLName            xml.Name `xml:"ListResourceRecordSetsResponse"`
+		IsTruncated        bool
+		ResourceRecordSets []ResourceRecordSetData `xml:"ResourceRecordSets>ResourceRecordSet"`
 	}{
-		ChangeTagsForResourceOutput: response,
+		IsTruncated:        false,
+		ResourceRecordSets: response,
 	})
 }
 
@@ -282,7 +337,12 @@ func (api *Api) UpdateHostedZoneComment(w http.ResponseWriter, r *http.Request) 
 
 	log.Println("Amazon-Target: Route53.UpdateHostedZoneComment")
 
-	var request aws53.UpdateHostedZoneCommentInput
+	type UpdateHostedZoneCommentWrapper struct {
+		XMLName xml.Name `xml:"UpdateHostedZoneCommentRequest"`
+		aws53.UpdateHostedZoneCommentInput
+	}
+
+	var request UpdateHostedZoneCommentWrapper
 
 	if err := xml.NewDecoder(r.Body).Decode(&request); err != nil {
 		log.Println("Error:", err)
@@ -294,7 +354,7 @@ func (api *Api) UpdateHostedZoneComment(w http.ResponseWriter, r *http.Request) 
 	vars := mux.Vars(r)
 	request.Id = aws.String(vars["id"])
 
-	response, err := api.service.UpdateHostedZoneComment(&request)
+	response, err := api.service.UpdateHostedZoneComment(&request.UpdateHostedZoneCommentInput)
 	if err != core.ErrNone {
 		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
 		return

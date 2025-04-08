@@ -11,6 +11,7 @@ const (
 	ErrInvalidInput core.ErrorCode = iota + 5300
 	ErrHostedZoneAlreadyExists
 	ErrNoSuchHostedZone
+	ErrInvalidChangeBatch
 )
 
 type errorCodeMap map[core.ErrorCode]awslib.ApiError
@@ -33,6 +34,11 @@ var ErrorCodes = errorCodeMap{
 	},
 	ErrInvalidInput: {
 		Code:           "InvalidInput",
+		Description:    "The input is not valid.",
+		HTTPStatusCode: http.StatusBadRequest,
+	},
+	ErrInvalidChangeBatch: {
+		Code:           "InvalidChangeBatch",
 		Description:    "The input is not valid.",
 		HTTPStatusCode: http.StatusBadRequest,
 	},

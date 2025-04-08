@@ -39,6 +39,74 @@ func (s *Service) Close() {
 	}
 }
 
+func (s *Service) ChangeResourceRecordSets(request *ChangeResourceRecordSetsRequest) (*aws53.ChangeResourceRecordSetsOutput, core.ErrorCode) {
+
+	hz, err := s.dataStore.getHostedZone(request.HostedZoneId)
+	if err != core.ErrNone {
+
+		return nil, err
+	}
+
+	ci := ChangeInfoData{
+		Id:          ChangeInfoPrefix + core.GenerateRandomString(14),
+		Status:      awstypes.ChangeStatusInsync,
+		SubmittedAt: time.Now().UTC().Format(time.RFC3339),
+		Comment:     aws.ToString(request.ChangeBatch.Comment),
+	}
+
+	err = s.dataStore.putRecordSets(hz, request.ChangeBatch.Changes, &ci)
+	if err != core.ErrNone {
+		return nil, err
+	}
+
+	result := aws53.ChangeResourceRecordSetsOutput{
+		ChangeInfo: ci.toChangeInfo(),
+	}
+
+	return &result, core.ErrNone
+}
+
+func (s *Service) ChangeTagsForResource(request *aws53.ChangeTagsForResourceInput) (*aws53.ChangeTagsForResourceOutput, core.ErrorCode) {
+
+	if request.ResourceType != awstypes.TagResourceTypeHostedzone {
+
+		return nil, ErrInvalidInput
+	}
+
+	hz, err := s.dataStore.getHostedZone(aws.ToString(request.ResourceId))
+	if err != core.ErrNone {
+
+		return nil, err
+	}
+
+	for _, tag := range request.RemoveTagKeys {
+
+		for i, mytag := range hz.Tags {
+			if mytag.Key == tag {
+				hz.Tags = slices.Delete(hz.Tags, i, i+1)
+				break
+			}
+		}
+	}
+
+	for _, tag := range request.AddTags {
+
+		newtag := core.ResourceTag{
+			Key:   aws.ToString(tag.Key),
+			Value: aws.ToString(tag.Value),
+		}
+
+		hz.Tags = append(hz.Tags, newtag)
+	}
+
+	err = s.dataStore.updateHostedZone(hz)
+	if err != core.ErrNone {
+		return nil, err
+	}
+
+	return &aws53.ChangeTagsForResourceOutput{}, core.ErrNone
+}
+
 func (s *Service) CreateHostedZone(zone *aws53.CreateHostedZoneInput) (*aws53.CreateHostedZoneOutput, core.ErrorCode) {
 
 	ci := ChangeInfoData{
@@ -51,7 +119,7 @@ func (s *Service) CreateHostedZone(zone *aws53.CreateHostedZoneInput) (*aws53.Cr
 	hz := HostedZoneData{
 		CallerReference: aws.ToString(zone.CallerReference),
 		Id:              HostedZonePrefix + core.GenerateRandomString(14),
-		Name:            aws.ToString(zone.Name),
+		Name:            strings.ToLower(aws.ToString(zone.Name)),
 		Config: HostedZoneConfigData{
 			PrivateZone: false,
 		},
@@ -166,45 +234,42 @@ func (s *Service) GetChange(request *aws53.GetChangeInput) (*aws53.GetChangeOutp
 	return result, core.ErrNone
 }
 
-func (s *Service) ChangeTagsForResource(request *aws53.ChangeTagsForResourceInput) (*aws53.ChangeTagsForResourceOutput, core.ErrorCode) {
+func (s *Service) ListHostedZones(_ *aws53.ListHostedZonesInput) (*aws53.ListHostedZonesOutput, core.ErrorCode) {
 
-	if request.ResourceType != awstypes.TagResourceTypeHostedzone {
-
-		return nil, ErrInvalidInput
-	}
-
-	hz, err := s.dataStore.getHostedZone(aws.ToString(request.ResourceId))
+	zones, err := s.dataStore.findHostedZones(".*")
 	if err != core.ErrNone {
 
 		return nil, err
 	}
 
-	for _, tag := range request.RemoveTagKeys {
-
-		for i, mytag := range hz.Tags {
-			if mytag.Key == tag {
-				hz.Tags = slices.Delete(hz.Tags, i, i+1)
-				break
-			}
-		}
+	result := aws53.ListHostedZonesOutput{
+		HostedZones: make([]awstypes.HostedZone, 0),
+		IsTruncated: false,
 	}
 
-	for _, tag := range request.AddTags {
-
-		newtag := core.ResourceTag{
-			Key:   aws.ToString(tag.Key),
-			Value: aws.ToString(tag.Value),
+	for _, hz := range zones {
+		count, cerr := s.dataStore.getRecordCount(hz.Id)
+		if cerr != core.ErrNone {
+			return nil, cerr
 		}
 
-		hz.Tags = append(hz.Tags, newtag)
+		result.HostedZones = append(result.HostedZones, *hz.toHostedZone(count))
 	}
 
-	err = s.dataStore.updateHostedZone(hz)
+	return &result, core.ErrNone
+}
+
+func (s *Service) ListResourceRecordSets(request *aws53.ListResourceRecordSetsInput) ([]ResourceRecordSetData, core.ErrorCode) {
+
+	hz, err := s.dataStore.getHostedZone(aws.ToString(request.HostedZoneId))
 	if err != core.ErrNone {
+
 		return nil, err
 	}
 
-	return &aws53.ChangeTagsForResourceOutput{}, core.ErrNone
+	result, err := s.dataStore.getResourceRecordSets(hz)
+
+	return result, core.ErrNone
 }
 
 func (s *Service) ListTagsForResource(request *aws53.ListTagsForResourceInput) (*aws53.ListTagsForResourceOutput, core.ErrorCode) {
@@ -236,31 +301,6 @@ func (s *Service) ListTagsForResource(request *aws53.ListTagsForResourceInput) (
 		}
 
 		result.ResourceTagSet.Tags = append(result.ResourceTagSet.Tags, awstag)
-	}
-
-	return &result, core.ErrNone
-}
-
-func (s *Service) ListHostedZones(_ *aws53.ListHostedZonesInput) (*aws53.ListHostedZonesOutput, core.ErrorCode) {
-
-	zones, err := s.dataStore.findHostedZones(".*")
-	if err != core.ErrNone {
-
-		return nil, err
-	}
-
-	result := aws53.ListHostedZonesOutput{
-		HostedZones: make([]awstypes.HostedZone, 0),
-		IsTruncated: false,
-	}
-
-	for _, hz := range zones {
-		count, cerr := s.dataStore.getRecordCount(hz.Id)
-		if cerr != core.ErrNone {
-			return nil, cerr
-		}
-
-		result.HostedZones = append(result.HostedZones, *hz.toHostedZone(count))
 	}
 
 	return &result, core.ErrNone

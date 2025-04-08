@@ -10,6 +10,7 @@ import (
 type PutData struct {
 	Key       string
 	Data      interface{}
+	Delete    bool
 	Overwrite bool
 	TTL       time.Duration
 }
@@ -67,35 +68,46 @@ func PutKeys(db *badger.DB, data []PutData) error {
 
 		for _, item := range data {
 
-			var currerr error
-			_, err := txn.Get([]byte(item.Key))
+			if item.Delete {
 
-			if err == nil {
-				if !item.Overwrite {
-					currerr = badger.ErrRejected
+				err := txn.Delete([]byte(item.Key))
+				if err != nil {
+
+					return err
 				}
-			} else if !errors.Is(err, badger.ErrKeyNotFound) {
 
-				currerr = err
-			}
+			} else {
 
-			if currerr != nil {
-				return currerr
-			}
+				var currerr error
+				_, err := txn.Get([]byte(item.Key))
 
-			bytes, jerr := json.Marshal(item.Data)
-			if jerr != nil {
-				return jerr
-			}
+				if err == nil {
+					if !item.Overwrite {
+						currerr = badger.ErrRejected
+					}
+				} else if !errors.Is(err, badger.ErrKeyNotFound) {
 
-			entry := badger.NewEntry([]byte(item.Key), bytes)
-			if item.TTL > time.Nanosecond {
-				entry = entry.WithTTL(item.TTL)
-			}
+					currerr = err
+				}
 
-			serr := txn.SetEntry(entry)
-			if serr != nil {
-				return serr
+				if currerr != nil {
+					return currerr
+				}
+
+				bytes, jerr := json.Marshal(item.Data)
+				if jerr != nil {
+					return jerr
+				}
+
+				entry := badger.NewEntry([]byte(item.Key), bytes)
+				if item.TTL > time.Nanosecond {
+					entry = entry.WithTTL(item.TTL)
+				}
+
+				serr := txn.SetEntry(entry)
+				if serr != nil {
+					return serr
+				}
 			}
 		}
 

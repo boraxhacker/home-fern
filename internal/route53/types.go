@@ -29,7 +29,7 @@ func (ci *ChangeInfoData) toChangeInfo() *awstypes.ChangeInfo {
 		Id:          aws.String(ci.Id),
 		Status:      ci.Status,
 		SubmittedAt: aws.Time(submitted),
-		Comment:     aws.String(ci.Comment),
+		Comment:     core.StringOrNil(ci.Comment),
 	}
 }
 
@@ -48,8 +48,8 @@ func (ds *DelegationSetData) toDelegationSet() *awstypes.DelegationSet {
 
 	return &awstypes.DelegationSet{
 		NameServers:     ds.NameServers,
-		CallerReference: aws.String(ds.CallerReference),
-		Id:              aws.String(ds.Id),
+		CallerReference: core.StringOrNil(ds.CallerReference),
+		Id:              core.StringOrNil(ds.Id),
 	}
 }
 
@@ -73,7 +73,7 @@ func (hz *HostedZoneData) toHostedZone(rrcount int) *awstypes.HostedZone {
 		Id:              aws.String(hz.Id),
 		Name:            aws.String(hz.Name),
 		Config: &awstypes.HostedZoneConfig{
-			Comment:     aws.String(hz.Config.Comment),
+			Comment:     core.StringOrNil(hz.Config.Comment),
 			PrivateZone: hz.Config.PrivateZone,
 		},
 		LinkedService:          nil,
@@ -81,4 +81,37 @@ func (hz *HostedZoneData) toHostedZone(rrcount int) *awstypes.HostedZone {
 	}
 
 	return &result
+}
+
+type ResourceRecordSetData struct {
+	Name                    string
+	Type                    awstypes.RRType
+	AliasTarget             *awstypes.AliasTarget
+	CidrRoutingConfig       *awstypes.CidrRoutingConfig
+	Failover                awstypes.ResourceRecordSetFailover `xml:",omitempty"`
+	GeoLocation             *awstypes.GeoLocation
+	GeoProximityLocation    *awstypes.GeoProximityLocation
+	HealthCheckId           *string
+	MultiValueAnswer        *bool
+	Region                  awstypes.ResourceRecordSetRegion `xml:",omitempty"`
+	ResourceRecords         []awstypes.ResourceRecord        `xml:"ResourceRecords>ResourceRecord"`
+	SetIdentifier           *string
+	TTL                     *int64
+	TrafficPolicyInstanceId *string
+	Weight                  *int64
+}
+
+type ChangeData struct {
+	Action            awstypes.ChangeAction
+	ResourceRecordSet *ResourceRecordSetData
+}
+
+type ChangeBatchWrapper struct {
+	Changes []ChangeData `xml:"Changes>Change"`
+	Comment *string
+}
+
+type ChangeResourceRecordSetsRequest struct {
+	ChangeBatch  ChangeBatchWrapper
+	HostedZoneId string
 }

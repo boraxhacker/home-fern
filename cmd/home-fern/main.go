@@ -60,14 +60,20 @@ func main() {
 		ssmCredentials.WithSigV4(ssmApi.Handle)).Methods("POST")
 
 	// Route53
-	router.HandleFunc("/route53/2013-04-01/hostedzone",
-		route53Credentials.WithSigV4(route53Api.CreateHostedZone)).Methods("POST")
-	router.HandleFunc("/route53/2013-04-01/hostedzone",
-		route53Credentials.WithSigV4(route53Api.ListHostedZones)).Methods("GET")
+	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset",
+		route53Credentials.WithSigV4(route53Api.ListResourceRecordSets)).Methods("GET")
+	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset/",
+		route53Credentials.WithSigV4(route53Api.ChangeResourceRecordSets)).Methods("POST")
+	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
+		route53Credentials.WithSigV4(route53Api.UpdateHostedZoneComment)).Methods("POST")
 	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
 		route53Credentials.WithSigV4(route53Api.DeleteHostedZone)).Methods("DELETE")
 	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
 		route53Credentials.WithSigV4(route53Api.GetHostedZone)).Methods("GET")
+	router.HandleFunc("/route53/2013-04-01/hostedzone",
+		route53Credentials.WithSigV4(route53Api.CreateHostedZone)).Methods("POST")
+	router.HandleFunc("/route53/2013-04-01/hostedzone",
+		route53Credentials.WithSigV4(route53Api.ListHostedZones)).Methods("GET")
 	router.HandleFunc("/route53/2013-04-01/hostedzonecount",
 		route53Credentials.WithSigV4(route53Api.GetHostedZoneCount)).Methods("GET")
 	router.HandleFunc("/route53/2013-04-01/change/{id}",
@@ -76,13 +82,6 @@ func main() {
 		route53Credentials.WithSigV4(route53Api.ListTagsForResource)).Methods("GET")
 	router.HandleFunc("/route53/2013-04-01/tags/{resourceType}/{resourceId}",
 		route53Credentials.WithSigV4(route53Api.ChangeTagsForResource)).Methods("POST")
-	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
-		route53Credentials.WithSigV4(route53Api.UpdateHostedZoneComment)).Methods("POST")
-
-	//router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset",
-	//	credentialsProvider.WithSigV4(route53Api.ListRecordSets)).Methods("GET")
-	//router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset",
-	//	credentialsProvider.WithSigV4(route53Api.ChangeRecordSets)).Methods("POST")
 
 	// TF State
 	router.HandleFunc("/tfstate/{project}",

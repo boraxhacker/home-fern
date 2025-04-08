@@ -5,6 +5,13 @@ import (
 	"time"
 )
 
+func StringOrNil(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // generateRandomString generates a random string of a specified length using alphanumeric characters,
 // ensuring that the string does not start with a number.
 func GenerateRandomString(length int) string {
