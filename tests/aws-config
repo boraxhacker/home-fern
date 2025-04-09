@@ -1,0 +1,12 @@
+
+[profile home-fern]
+region = us-east-1
+aws_access_key_id = my-access
+aws_secret_access_key = really-long-key
+services = home-fern
+
+[services home-fern]
+route_53 =
+  endpoint_url = http://localhost:9080/route53
+ssm =
+  endpoint_url = http://localhost:9080/ssm

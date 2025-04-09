@@ -57,7 +57,7 @@ const (
 	ErrCredMalformed
 	ErrMalformedCredentialDate
 	ErrAuthorizationHeaderMalformed
-	ErrInvalidServiceSSM
+	ErrInvalidService
 	ErrInvalidRequestVersion
 	ErrMissingSignTag
 	ErrMissingSignHeadersTag
@@ -127,9 +127,9 @@ var ErrorCodes = errorCodeMap{
 		Description:    "Invalid date format header, expected to be in ISO8601, RFC1123 or RFC1123Z time format.",
 		HTTPStatusCode: http.StatusBadRequest,
 	},
-	ErrInvalidServiceSSM: {
+	ErrInvalidService: {
 		Code:           "AuthorizationParametersError",
-		Description:    "Error parsing the Credential/X-Amz-Credential parameter; incorrect service. This endpoint belongs to \"ssm\".",
+		Description:    "Error parsing the Credential/X-Amz-Credential parameter; incorrect service.",
 		HTTPStatusCode: http.StatusBadRequest,
 	},
 	ErrInvalidRequestVersion: {

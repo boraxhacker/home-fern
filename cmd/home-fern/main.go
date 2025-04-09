@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
+	"home-fern/internal/route53"
 	"home-fern/internal/ssm"
 	"home-fern/internal/tfstate"
 	"log"
@@ -16,8 +17,10 @@ import (
 
 func main() {
 
-	configFilePtr := flag.String("config", ".home-fern-config.yaml", "Path to the home-fern config file.")
-	dataPathPtr := flag.String("data-path", ".home-fern-data", "Path to data store folder.")
+	configFilePtr :=
+		flag.String("config", ".home-fern-config.yaml", "Path to the home-fern config file.")
+	dataPathPtr :=
+		flag.String("data-path", ".home-fern-data", "Path to data store folder.")
 	flag.Parse()
 
 	fernConfig := readAuthCredsOrDie(*configFilePtr)
@@ -32,24 +35,67 @@ func main() {
 			AccountID:       core.ZeroAccountId,
 		})
 	}
-	credentialsProvider := awslib.NewCredentialsProvider(awslib.ServiceSsm, fernConfig.Region, credentials)
+	ssmCredentials := awslib.NewCredentialsProvider(awslib.ServiceSsm, fernConfig.Region, credentials)
 
-	service := ssm.NewParameterService(fernConfig, core.ZeroAccountId, *dataPathPtr)
-	defer service.Close()
+	ssmsvc := ssm.NewService(fernConfig, core.ZeroAccountId, *dataPathPtr)
+	defer ssmsvc.Close()
 
-	ssmApi := ssm.NewParameterApi(service, credentialsProvider)
+	ssmApi := ssm.NewParameterApi(ssmsvc, ssmCredentials)
+
+	r53svc := route53.NewService(&fernConfig.DnsDefaults, *dataPathPtr)
+	defer r53svc.Close()
+
+	route53Credentials := awslib.NewCredentialsProvider(awslib.ServiceRoute53, fernConfig.Region, credentials)
+
+	route53Api := route53.NewRoute53Api(r53svc, route53Credentials)
 
 	basicProvider := core.NewBasicCredentialsProvider(fernConfig.Credentials)
 
 	stateApi := tfstate.NewStateApi(*dataPathPtr + "/tfstate")
 
 	router := mux.NewRouter()
-	router.HandleFunc("/ssm", credentialsProvider.WithSigV4(ssmApi.Handle)).Methods("POST")
-	router.HandleFunc("/tfstate/{project}", basicProvider.WithBasicAuth(stateApi.GetState)).Methods("GET")
-	router.HandleFunc("/tfstate/{project}", basicProvider.WithBasicAuth(stateApi.SaveState)).Methods("POST")
-	router.HandleFunc("/tfstate/{project}", basicProvider.WithBasicAuth(stateApi.DeleteState)).Methods("DELETE")
-	router.HandleFunc("/tfstate/{project}/lock", basicProvider.WithBasicAuth(stateApi.LockState)).Methods("LOCK")
-	router.HandleFunc("/tfstate/{project}/unlock", basicProvider.WithBasicAuth(stateApi.UnlockState)).Methods("UNLOCK")
+
+	// SSM
+	router.HandleFunc("/ssm",
+		ssmCredentials.WithSigV4(ssmApi.Handle)).Methods("POST")
+
+	// Route53
+	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset",
+		route53Credentials.WithSigV4(route53Api.ListResourceRecordSets)).Methods("GET")
+	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset/",
+		route53Credentials.WithSigV4(route53Api.ChangeResourceRecordSets)).Methods("POST")
+	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset",
+		route53Credentials.WithSigV4(route53Api.ChangeResourceRecordSets)).Methods("POST")
+	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
+		route53Credentials.WithSigV4(route53Api.UpdateHostedZoneComment)).Methods("POST")
+	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
+		route53Credentials.WithSigV4(route53Api.DeleteHostedZone)).Methods("DELETE")
+	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
+		route53Credentials.WithSigV4(route53Api.GetHostedZone)).Methods("GET")
+	router.HandleFunc("/route53/2013-04-01/hostedzone",
+		route53Credentials.WithSigV4(route53Api.CreateHostedZone)).Methods("POST")
+	router.HandleFunc("/route53/2013-04-01/hostedzone",
+		route53Credentials.WithSigV4(route53Api.ListHostedZones)).Methods("GET")
+	router.HandleFunc("/route53/2013-04-01/hostedzonecount",
+		route53Credentials.WithSigV4(route53Api.GetHostedZoneCount)).Methods("GET")
+	router.HandleFunc("/route53/2013-04-01/change/{id}",
+		route53Credentials.WithSigV4(route53Api.GetChange)).Methods("GET")
+	router.HandleFunc("/route53/2013-04-01/tags/{resourceType}/{resourceId}",
+		route53Credentials.WithSigV4(route53Api.ListTagsForResource)).Methods("GET")
+	router.HandleFunc("/route53/2013-04-01/tags/{resourceType}/{resourceId}",
+		route53Credentials.WithSigV4(route53Api.ChangeTagsForResource)).Methods("POST")
+
+	// TF State
+	router.HandleFunc("/tfstate/{project}",
+		basicProvider.WithBasicAuth(stateApi.GetState)).Methods("GET")
+	router.HandleFunc("/tfstate/{project}",
+		basicProvider.WithBasicAuth(stateApi.SaveState)).Methods("POST")
+	router.HandleFunc("/tfstate/{project}",
+		basicProvider.WithBasicAuth(stateApi.DeleteState)).Methods("DELETE")
+	router.HandleFunc("/tfstate/{project}/lock",
+		basicProvider.WithBasicAuth(stateApi.LockState)).Methods("LOCK")
+	router.HandleFunc("/tfstate/{project}/unlock",
+		basicProvider.WithBasicAuth(stateApi.UnlockState)).Methods("UNLOCK")
 
 	addr := ":9080"
 	log.Printf("Listening on %s", addr)
@@ -82,8 +128,14 @@ func simplePrintConfig(config *core.FernConfig) {
 		log.Printf("\tAccessKey %02d: %s\n", i+1, cred.AccessKey)
 	}
 
-	log.Println("Keys:")
+	log.Println("Kms:")
 	for i, key := range config.Keys {
 		log.Printf("\tKMS Key %02d: alias/%s\n", i+1, key.Alias)
+	}
+
+	log.Println("Dns:")
+	log.Printf("\tSOA: %s\n", config.DnsDefaults.Soa)
+	for i, ns := range config.DnsDefaults.NameServers {
+		log.Printf("\tNameserver %02d: %s\n", i+1, ns)
 	}
 }

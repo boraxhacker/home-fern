@@ -4,13 +4,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsssm "github.com/aws/aws-sdk-go-v2/service/ssm"
 	awstypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
+	"home-fern/internal/core"
 	"strings"
 	"time"
 )
 
 type ParamName string
 
-func NewParamName(ptrname *string) (ParamName, ErrorCode) {
+func NewParamName(ptrname *string) (ParamName, core.ErrorCode) {
 
 	name := aws.ToString(ptrname)
 
@@ -22,7 +23,7 @@ func NewParamName(ptrname *string) (ParamName, ErrorCode) {
 		return "", ErrInvalidName
 	}
 
-	return ParamName(name), ErrNone
+	return ParamName(name), core.ErrNone
 }
 
 func (p ParamName) asPathName() ParamName {
@@ -46,7 +47,7 @@ func (p ParamName) asEqualsRegex() string {
 
 type ParamPath string
 
-func NewParamPath(ptrpath *string) (ParamPath, ErrorCode) {
+func NewParamPath(ptrpath *string) (ParamPath, core.ErrorCode) {
 
 	path := aws.ToString(ptrpath)
 
@@ -54,11 +55,11 @@ func NewParamPath(ptrpath *string) (ParamPath, ErrorCode) {
 
 		result := strings.TrimSuffix(path, "/")
 		_, err := NewParamName(&result)
-		if err != ErrNone {
+		if err != core.ErrNone {
 			return "", err
 		}
 
-		return ParamPath(result), ErrNone
+		return ParamPath(result), core.ErrNone
 	}
 
 	return "", ErrInvalidPath
@@ -78,11 +79,6 @@ func (p ParamPath) asOneLevelRegex() string {
 	return "^" + string(path) + "/[^/]+$"
 }
 
-type ResourceTag struct {
-	Key   string
-	Value string
-}
-
 type ParameterData struct {
 	AllowedPattern   string
 	DataType         string
@@ -92,17 +88,17 @@ type ParameterData struct {
 	LastModifiedUser string
 	Name             ParamName
 	Policies         string
-	Tags             []ResourceTag
+	Tags             []core.ResourceTag
 	Tier             awstypes.ParameterTier
 	Type             awstypes.ParameterType
 	Value            string
 	Version          int64
 }
 
-func NewParameterData(request *awsssm.PutParameterInput) (*ParameterData, ErrorCode) {
+func NewParameterData(request *awsssm.PutParameterInput) (*ParameterData, core.ErrorCode) {
 
 	paramName, err := NewParamName(request.Name)
-	if err != ErrNone {
+	if err != core.ErrNone {
 		return nil, err
 	}
 
@@ -149,10 +145,10 @@ func NewParameterData(request *awsssm.PutParameterInput) (*ParameterData, ErrorC
 
 	for _, tag := range request.Tags {
 		result.Tags = append(result.Tags,
-			ResourceTag{Key: aws.ToString(tag.Key), Value: aws.ToString(tag.Value)})
+			core.ResourceTag{Key: aws.ToString(tag.Key), Value: aws.ToString(tag.Value)})
 	}
 
-	return &result, ErrNone
+	return &result, core.ErrNone
 }
 
 type KeyFilterType string
@@ -195,7 +191,7 @@ type ParameterFilter struct {
 	Values []string         `json:"Values"`
 }
 
-func NewParameterFilter(filter *awstypes.ParameterStringFilter) (*ParameterFilter, ErrorCode) {
+func NewParameterFilter(filter *awstypes.ParameterStringFilter) (*ParameterFilter, core.ErrorCode) {
 
 	result := ParameterFilter{
 		Key:    KeyFilterType(aws.ToString(filter.Key)),
@@ -223,7 +219,7 @@ func NewParameterFilter(filter *awstypes.ParameterStringFilter) (*ParameterFilte
 		}
 	}
 
-	return &result, ErrNone
+	return &result, core.ErrNone
 }
 
 type ParameterArnGenerator func(ParamName) string

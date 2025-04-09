@@ -9,13 +9,24 @@ type FernCredentials struct {
 type FernConfig struct {
 	Region      string            `yaml:"region"`
 	Credentials []FernCredentials `yaml:"credentials"`
-	Keys        []KmsKey          `yaml:"keys"`
+	Keys        []KmsKey          `yaml:"kms"`
+	DnsDefaults DnsDefaults       `yaml:"dns"`
+}
+
+type DnsDefaults struct {
+	Soa         string   `yaml:"soa"`
+	NameServers []string `yaml:"nameServers"`
 }
 
 type KmsKey struct {
 	KeyId string `yaml:"id"`
 	Alias string `yaml:"alias"`
 	Key   string `yaml:"key"`
+}
+
+type ResourceTag struct {
+	Key   string
+	Value string
 }
 
 const (
