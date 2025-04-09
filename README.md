@@ -11,10 +11,12 @@ APIs and technologies.
 home-fern (sorta) implements 
 * Terraform state HTTP backend 
 * AWS SSM Stored Parameter API
+* AWS Route53 API
 
 The goal is to enable the use of well known frameworks, such as Terraform, in the home lab setting.
+See terraform example under the tests folder.
 
-For example, using home-ssm, it's possible to: 
+For example, using home-fern, it's possible to: 
 * put-parameter using AWS CLI 
 * get-parameter using Terraform
 
@@ -56,11 +58,14 @@ terraform {
 
 provider "aws" {
   profile = "home-fern"
-  region  = "us-east-1"
 
-  endpoints {
-    ssm = "http://localhost:9080/ssm"
-  }
+  s3_use_path_style = true
+
+  # Skip AWS related checks and validations
+  skip_credentials_validation = true
+  skip_requesting_account_id = true
+  skip_metadata_api_check = true
+  skip_region_validation = true
 }
 
 data "aws_ssm_parameter" "database_password" {
@@ -94,13 +99,21 @@ credentials:
 
 # AES-256 uses a 32-byte (256-bit) key
 # openssl rand -base64 32
-keys:
+kms:
   - alias: aws/ssm
     id: 844c1364-08b8-11f0-aeb7-33cf4b255e16
     key: DkVsBYNRbORxQ6vtjUCex54YdfYfxd3c5PcP/ZruwUs=
   - alias: home-ssm
     id:  d0c49d70-4fae-4a20-84f0-d03fb6d670cb
     key: rvl7SbrNObB5MMQDUUAoInJXpyCA3QDqELyuwa2G48M=
+
+dns:
+  soa: ns-1.example.com. admin.example.com. (1 3600 180 604800 1800)
+  nameServers:
+    - ns-1.example.com
+    - ns-2.example.com
+    - ns-3.example.com
+    - ns-4.example.com
 ```
 
 ## Execution
