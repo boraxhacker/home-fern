@@ -2,10 +2,18 @@
 
 resource "aws_ssm_parameter" "param1" {
 
-  name = "/user/fred"
+  name = "/user/fred/username"
   value = "fred"
   type = "String"
 }
+
+resource "aws_ssm_parameter" "param2" {
+
+  name = "/user/fred/password"
+  value = "fred"
+  type = "SecureString"
+}
+
 
 resource "aws_route53_zone" "zone1" {
   name = "fred.net"
