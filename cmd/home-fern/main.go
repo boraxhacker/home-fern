@@ -42,7 +42,7 @@ func main() {
 
 	ssmApi := ssm.NewParameterApi(ssmsvc, ssmCredentials)
 
-	r53svc := route53.NewService(*dataPathPtr)
+	r53svc := route53.NewService(&fernConfig.DnsDefaults, *dataPathPtr)
 	defer r53svc.Close()
 
 	route53Credentials := awslib.NewCredentialsProvider(awslib.ServiceRoute53, fernConfig.Region, credentials)
@@ -63,6 +63,8 @@ func main() {
 	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset",
 		route53Credentials.WithSigV4(route53Api.ListResourceRecordSets)).Methods("GET")
 	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset/",
+		route53Credentials.WithSigV4(route53Api.ChangeResourceRecordSets)).Methods("POST")
+	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset",
 		route53Credentials.WithSigV4(route53Api.ChangeResourceRecordSets)).Methods("POST")
 	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
 		route53Credentials.WithSigV4(route53Api.UpdateHostedZoneComment)).Methods("POST")
@@ -126,8 +128,14 @@ func simplePrintConfig(config *core.FernConfig) {
 		log.Printf("\tAccessKey %02d: %s\n", i+1, cred.AccessKey)
 	}
 
-	log.Println("Keys:")
+	log.Println("Kms:")
 	for i, key := range config.Keys {
 		log.Printf("\tKMS Key %02d: alias/%s\n", i+1, key.Alias)
+	}
+
+	log.Println("Dns:")
+	log.Printf("\tSOA: %s\n", config.DnsDefaults.Soa)
+	for i, ns := range config.DnsDefaults.NameServers {
+		log.Printf("\tNameserver %02d: %s\n", i+1, ns)
 	}
 }

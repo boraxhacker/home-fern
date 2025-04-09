@@ -17,16 +17,25 @@ import (
 */
 
 type Service struct {
-	dataStore *dataStore
+	dataStore  *dataStore
+	soaDefault string
+	nsRecords  []awstypes.ResourceRecord
 }
 
-func NewService(dataPath string) *Service {
+func NewService(dns *core.DnsDefaults, dataPath string) *Service {
 
 	databasePath := dataPath + "/route53"
 	dataStore := newDataStore(databasePath)
 
+	nsRecords := make([]awstypes.ResourceRecord, 0)
+	for _, ns := range dns.NameServers {
+		nsRecords = append(nsRecords, awstypes.ResourceRecord{Value: aws.String(ns)})
+	}
+
 	result := Service{
-		dataStore: dataStore,
+		dataStore:  dataStore,
+		soaDefault: dns.Soa,
+		nsRecords:  nsRecords,
 	}
 
 	return &result
@@ -107,7 +116,8 @@ func (s *Service) ChangeTagsForResource(request *aws53.ChangeTagsForResourceInpu
 	return &aws53.ChangeTagsForResourceOutput{}, core.ErrNone
 }
 
-func (s *Service) CreateHostedZone(zone *aws53.CreateHostedZoneInput) (*aws53.CreateHostedZoneOutput, core.ErrorCode) {
+func (s *Service) CreateHostedZone(
+	zone *aws53.CreateHostedZoneInput) (*aws53.CreateHostedZoneOutput, core.ErrorCode) {
 
 	ci := ChangeInfoData{
 		Id:          ChangeInfoPrefix + core.GenerateRandomString(14),
@@ -121,9 +131,11 @@ func (s *Service) CreateHostedZone(zone *aws53.CreateHostedZoneInput) (*aws53.Cr
 		Id:              HostedZonePrefix + core.GenerateRandomString(14),
 		Name:            strings.ToLower(aws.ToString(zone.Name)),
 		Config: HostedZoneConfigData{
+			Comment:     aws.ToString(zone.HostedZoneConfig.Comment),
 			PrivateZone: false,
 		},
 		DelegationSet: DelegationSetData{
+			Id:          aws.ToString(zone.DelegationSetId),
 			NameServers: strings.Split(NameServers, ","),
 		},
 	}
@@ -132,15 +144,24 @@ func (s *Service) CreateHostedZone(zone *aws53.CreateHostedZoneInput) (*aws53.Cr
 		hz.Name = hz.Name + "."
 	}
 
-	if zone.HostedZoneConfig != nil {
-		hz.Config.Comment = aws.ToString(zone.HostedZoneConfig.Comment)
-	}
+	changes := []ChangeData{{
+		Action: awstypes.ChangeActionCreate,
+		ResourceRecordSet: &ResourceRecordSetData{
+			Name:            hz.Name,
+			Type:            awstypes.RRTypeSoa,
+			TTL:             aws.Int64(900),
+			ResourceRecords: []awstypes.ResourceRecord{{Value: aws.String(s.soaDefault)}},
+		},
+	}, {
+		Action: awstypes.ChangeActionCreate,
+		ResourceRecordSet: &ResourceRecordSetData{
+			Name:            hz.Name,
+			Type:            awstypes.RRTypeNs,
+			ResourceRecords: s.nsRecords,
+		},
+	}}
 
-	if zone.DelegationSetId != nil {
-		hz.DelegationSet.Id = aws.ToString(zone.DelegationSetId)
-	}
-
-	err := s.dataStore.putHostedZone(&hz, &ci)
+	err := s.dataStore.putHostedZone(&hz, changes, &ci)
 	if err != core.ErrNone {
 
 		return nil, err
@@ -155,21 +176,24 @@ func (s *Service) CreateHostedZone(zone *aws53.CreateHostedZoneInput) (*aws53.Cr
 	return &result, core.ErrNone
 }
 
-func (s *Service) DeleteHostedZone(zone *aws53.DeleteHostedZoneInput) (*aws53.DeleteHostedZoneOutput, core.ErrorCode) {
+func (s *Service) DeleteHostedZone(
+	zone *aws53.DeleteHostedZoneInput) (*aws53.DeleteHostedZoneOutput, core.ErrorCode) {
 
-	err := s.dataStore.deleteHostedZone(aws.ToString(zone.Id))
+	ci := ChangeInfoData{
+		Id:          core.GenerateRandomString(14),
+		Status:      awstypes.ChangeStatusInsync,
+		SubmittedAt: time.Now().UTC().Format(time.RFC3339),
+		Comment:     "Change is complete.",
+	}
+
+	err := s.dataStore.deleteHostedZone(aws.ToString(zone.Id), &ci)
 	if err != core.ErrNone {
 
 		return nil, err
 	}
 
 	result := &aws53.DeleteHostedZoneOutput{
-		ChangeInfo: &awstypes.ChangeInfo{
-			Id:          aws.String(core.GenerateRandomString(14)),
-			Status:      awstypes.ChangeStatusInsync,
-			SubmittedAt: aws.Time(time.Now().UTC()),
-			Comment:     aws.String("Change is complete. ChangeInfo is not persisted."),
-		},
+		ChangeInfo: ci.toChangeInfo(),
 	}
 
 	return result, core.ErrNone
@@ -186,7 +210,8 @@ func (s *Service) GetHostedZoneCount() (*aws53.GetHostedZoneCountOutput, core.Er
 	return &aws53.GetHostedZoneCountOutput{HostedZoneCount: aws.Int64(int64(result))}, core.ErrNone
 }
 
-func (s *Service) GetHostedZone(zone *aws53.GetHostedZoneInput) (*aws53.GetHostedZoneOutput, core.ErrorCode) {
+func (s *Service) GetHostedZone(
+	zone *aws53.GetHostedZoneInput) (*aws53.GetHostedZoneOutput, core.ErrorCode) {
 
 	hz, err := s.dataStore.getHostedZone(aws.ToString(zone.Id))
 	if err != core.ErrNone {
@@ -207,7 +232,8 @@ func (s *Service) GetHostedZone(zone *aws53.GetHostedZoneInput) (*aws53.GetHoste
 	return result, core.ErrNone
 }
 
-func (s *Service) GetChange(request *aws53.GetChangeInput) (*aws53.GetChangeOutput, core.ErrorCode) {
+func (s *Service) GetChange(
+	request *aws53.GetChangeInput) (*aws53.GetChangeOutput, core.ErrorCode) {
 
 	ci, err := s.dataStore.getChange(aws.ToString(request.Id))
 	if err != core.ErrNone {
@@ -234,7 +260,8 @@ func (s *Service) GetChange(request *aws53.GetChangeInput) (*aws53.GetChangeOutp
 	return result, core.ErrNone
 }
 
-func (s *Service) ListHostedZones(_ *aws53.ListHostedZonesInput) (*aws53.ListHostedZonesOutput, core.ErrorCode) {
+func (s *Service) ListHostedZones(
+	_ *aws53.ListHostedZonesInput) (*aws53.ListHostedZonesOutput, core.ErrorCode) {
 
 	zones, err := s.dataStore.findHostedZones(".*")
 	if err != core.ErrNone {
@@ -259,7 +286,8 @@ func (s *Service) ListHostedZones(_ *aws53.ListHostedZonesInput) (*aws53.ListHos
 	return &result, core.ErrNone
 }
 
-func (s *Service) ListResourceRecordSets(request *aws53.ListResourceRecordSetsInput) ([]ResourceRecordSetData, core.ErrorCode) {
+func (s *Service) ListResourceRecordSets(
+	request *aws53.ListResourceRecordSetsInput) (*ListRecordSetsOutput, core.ErrorCode) {
 
 	hz, err := s.dataStore.getHostedZone(aws.ToString(request.HostedZoneId))
 	if err != core.ErrNone {
@@ -267,12 +295,20 @@ func (s *Service) ListResourceRecordSets(request *aws53.ListResourceRecordSetsIn
 		return nil, err
 	}
 
-	result, err := s.dataStore.getResourceRecordSets(hz)
+	options := listOptions{
+		hostedZone:  hz,
+		startRecord: aws.ToString(request.StartRecordName),
+		startType:   request.StartRecordType,
+		count:       int(aws.ToInt32(request.MaxItems)),
+	}
+
+	result, err := s.dataStore.getResourceRecordSets(&options)
 
 	return result, core.ErrNone
 }
 
-func (s *Service) ListTagsForResource(request *aws53.ListTagsForResourceInput) (*aws53.ListTagsForResourceOutput, core.ErrorCode) {
+func (s *Service) ListTagsForResource(
+	request *aws53.ListTagsForResourceInput) (*aws53.ListTagsForResourceOutput, core.ErrorCode) {
 
 	if request.ResourceType != awstypes.TagResourceTypeHostedzone {
 
@@ -306,7 +342,8 @@ func (s *Service) ListTagsForResource(request *aws53.ListTagsForResourceInput) (
 	return &result, core.ErrNone
 }
 
-func (s *Service) UpdateHostedZoneComment(request *aws53.UpdateHostedZoneCommentInput) (*aws53.UpdateHostedZoneCommentOutput, core.ErrorCode) {
+func (s *Service) UpdateHostedZoneComment(
+	request *aws53.UpdateHostedZoneCommentInput) (*aws53.UpdateHostedZoneCommentOutput, core.ErrorCode) {
 
 	hz, err := s.dataStore.getHostedZone(aws.ToString(request.Id))
 	if err != core.ErrNone {

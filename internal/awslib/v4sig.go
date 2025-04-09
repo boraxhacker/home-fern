@@ -82,6 +82,8 @@ func (p *CredentialsProvider) WithSigV4(next http.HandlerFunc) http.HandlerFunc 
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		accessKey, err := p.checkV4Sig(r)
+		//log.Println("Request", r.URL, r.Header)
+
 		if err.Code != "" {
 			log.Println("V4Sig Failed", err)
 			WriteErrorResponseJSON(w, err, r.URL, p.Region)
@@ -166,7 +168,12 @@ func (p *CredentialsProvider) checkV4Sig(r *http.Request) (string, ApiError) {
 	}
 
 	// Query string.
-	queryStr := r.Form.Encode()
+	var queryStr string
+	if r.Method == http.MethodGet {
+		queryStr = r.URL.Query().Encode()
+	} else {
+		queryStr = r.Form.Encode()
+	}
 
 	// Get canonical request.
 	canonicalRequest := getCanonicalRequest(
@@ -184,6 +191,9 @@ func (p *CredentialsProvider) checkV4Sig(r *http.Request) (string, ApiError) {
 
 	// Verify if signature match.
 	if !compareSignatureV4(newSignature, signV4Values.Signature) {
+		//log.Println("Failed CanonicalRequest", canonicalRequest)
+		//log.Println("Failed StrToSign", stringToSign)
+		//log.Println("Failed Signature", newSignature, signV4Values.Signature)
 		return "", ErrorCodes.toApiErr(ErrSignatureDoesNotMatch)
 	}
 
@@ -219,7 +229,7 @@ func extractSignedHeaders(signedHeaders []string, r *http.Request) (http.Header,
 	extractedSignedHeaders := make(http.Header)
 	for _, header := range signedHeaders {
 		// `host` will not be found in the headers, can be found in r.Host.
-		// but its alway necessary that the list of signed headers containing host in it.
+		// but its always necessary that the list of signed headers containing host in it.
 		val, ok := reqHeaders[http.CanonicalHeaderKey(header)]
 		if !ok {
 			// try to set headers from Query String

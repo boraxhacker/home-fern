@@ -101,6 +101,12 @@ type ResourceRecordSetData struct {
 	Weight                  *int64
 }
 
+type ListRecordSetsOutput struct {
+	Records    []ResourceRecordSetData
+	NextRecord string
+	NexType    awstypes.RRType
+}
+
 type ChangeData struct {
 	Action            awstypes.ChangeAction
 	ResourceRecordSet *ResourceRecordSetData

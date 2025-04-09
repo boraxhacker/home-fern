@@ -291,10 +291,16 @@ func (api *Api) ListResourceRecordSets(w http.ResponseWriter, r *http.Request) {
 	awslib.WriteSuccessResponseXML(w, struct {
 		XMLName            xml.Name `xml:"ListResourceRecordSetsResponse"`
 		IsTruncated        bool
+		MaxItems           *int32
+		NextRecordName     string                  `xml:",omitempty"`
+		NextRecordType     awstypes.RRType         `xml:",omitempty"`
 		ResourceRecordSets []ResourceRecordSetData `xml:"ResourceRecordSets>ResourceRecordSet"`
 	}{
-		IsTruncated:        false,
-		ResourceRecordSets: response,
+		MaxItems:           request.MaxItems,
+		IsTruncated:        response.NextRecord != "",
+		NextRecordName:     response.NextRecord,
+		NextRecordType:     response.NexType,
+		ResourceRecordSets: response.Records,
 	})
 }
 
