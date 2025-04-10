@@ -2,6 +2,6 @@ FROM alpine:latest
 
 WORKDIR /app
 
-COPY home-ssm home-ssm
+COPY home-fern home-fern
 
-CMD ["/app/home-ssm"]
+CMD ["/app/home-fern"]
