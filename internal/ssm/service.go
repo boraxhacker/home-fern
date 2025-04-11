@@ -3,6 +3,7 @@ package ssm
 import (
 	"fmt"
 	"home-fern/internal/core"
+	"io"
 	"slices"
 	"strings"
 
@@ -268,6 +269,11 @@ func (service *Service) PutParameter(
 	}
 
 	return &awsssm.PutParameterOutput{Tier: awstypes.ParameterTierStandard, Version: newVersion}, core.ErrNone
+}
+
+func (service *Service) LogKeys(writer io.Writer) error {
+
+	return core.LogKeys(service.dataStore.db, writer)
 }
 
 func (service *Service) AddTagsToResource(
