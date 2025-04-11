@@ -1,5 +1,7 @@
 package core
 
+import "io"
+
 type FernCredentials struct {
 	AccessKey string `yaml:"accessKey"`
 	SecretKey string `yaml:"secretKey"`
@@ -27,6 +29,10 @@ type KmsKey struct {
 type ResourceTag struct {
 	Key   string
 	Value string
+}
+
+type DatabaseDumper interface {
+	LogKeys(writer io.Writer) error
 }
 
 const (

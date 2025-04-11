@@ -5,6 +5,7 @@ import (
 	aws53 "github.com/aws/aws-sdk-go-v2/service/route53"
 	awstypes "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"home-fern/internal/core"
+	"io"
 	"slices"
 	"strings"
 	"time"
@@ -130,14 +131,15 @@ func (s *Service) CreateHostedZone(
 		CallerReference: aws.ToString(zone.CallerReference),
 		Id:              HostedZonePrefix + core.GenerateRandomString(14),
 		Name:            strings.ToLower(aws.ToString(zone.Name)),
-		Config: HostedZoneConfigData{
-			Comment:     aws.ToString(zone.HostedZoneConfig.Comment),
-			PrivateZone: false,
-		},
 		DelegationSet: DelegationSetData{
 			Id:          aws.ToString(zone.DelegationSetId),
 			NameServers: strings.Split(NameServers, ","),
 		},
+	}
+
+	if zone.HostedZoneConfig != nil {
+		hz.Config.Comment = aws.ToString(zone.HostedZoneConfig.Comment)
+		hz.Config.PrivateZone = zone.HostedZoneConfig.PrivateZone
 	}
 
 	if !strings.HasSuffix(hz.Name, ".") {
@@ -340,6 +342,11 @@ func (s *Service) ListTagsForResource(
 	}
 
 	return &result, core.ErrNone
+}
+
+func (s *Service) LogKeys(writer io.Writer) error {
+
+	return core.LogKeys(s.dataStore.db, writer)
 }
 
 func (s *Service) UpdateHostedZoneComment(

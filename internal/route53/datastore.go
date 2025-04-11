@@ -66,7 +66,7 @@ func (ds *dataStore) deleteHostedZone(id string, ci *ChangeInfoData) core.ErrorC
 
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false
-		opts.Prefix = []byte(RecordSetPrefix + strings.TrimPrefix(HostedZonePrefix, id) + "/")
+		opts.Prefix = []byte(RecordSetPrefix + strings.TrimPrefix(id, HostedZonePrefix) + "/")
 
 		it := txn.NewIterator(opts)
 		defer it.Close()
@@ -226,7 +226,7 @@ func (ds *dataStore) getHostedZoneCount() (int, core.ErrorCode) {
 
 func (ds *dataStore) getRecordCount(id string) (int, core.ErrorCode) {
 
-	result, err := core.GetPrefixCount(ds.db, RecordSetPrefix+strings.TrimPrefix(HostedZonePrefix, id)+"/")
+	result, err := core.GetPrefixCount(ds.db, RecordSetPrefix+strings.TrimPrefix(id, HostedZonePrefix)+"/")
 	if err != nil {
 
 		return -1, translateBadgerError(err)
@@ -246,7 +246,7 @@ func (ds *dataStore) getResourceRecordSets(options *listOptions) (*ListRecordSet
 	start := ""
 	count := 0
 
-	prefix := RecordSetPrefix + strings.TrimPrefix(HostedZonePrefix, options.hostedZone.Id) + "/"
+	prefix := RecordSetPrefix + strings.TrimPrefix(options.hostedZone.Id, HostedZonePrefix) + "/"
 	if options.startRecord != "" && options.startType != "" {
 
 		header, err := convertToKey(options.hostedZone.Name, options.startRecord, options.startType)
@@ -406,7 +406,7 @@ func translateBadgerError(err error) core.ErrorCode {
 
 func convertToPutData(hz *HostedZoneData, changes []ChangeData) ([]core.PutData, core.ErrorCode) {
 
-	hzid := strings.TrimPrefix(HostedZonePrefix, hz.Id)
+	hzid := strings.TrimPrefix(hz.Id, HostedZonePrefix)
 
 	result := make([]core.PutData, 0)
 
@@ -431,25 +431,25 @@ func convertToPutData(hz *HostedZoneData, changes []ChangeData) ([]core.PutData,
 	return result, core.ErrNone
 }
 
-func convertToKey(domain string, rrname string, rrtype awstypes.RRType) (*recordKey, core.ErrorCode) {
+func convertToKey(domainp string, rrname string, rrtype awstypes.RRType) (*recordKey, core.ErrorCode) {
 
 	lwrname := strings.ToLower(rrname)
 	if !strings.HasSuffix(lwrname, ".") {
 		lwrname = lwrname + "."
 	}
 
-	if lwrname != domain && !strings.HasSuffix(lwrname, "."+domain) {
+	if lwrname != domainp && !strings.HasSuffix(lwrname, "."+domainp) {
 		return nil, ErrInvalidChangeBatch
 	}
 
-	rrkey := strings.Replace(lwrname, domain, "", -1)
+	rrkey := strings.Replace(lwrname, domainp, "", -1)
 	if rrkey == "" {
 		rrkey = "@"
 	}
 
 	result := recordKey{
 		rrname: lwrname,
-		rrkey:  "/" + strings.TrimSuffix(lwrname, ".") + "/" + strings.ToLower(string(rrtype)),
+		rrkey:  "/" + strings.TrimSuffix(rrkey, ".") + "/" + strings.ToLower(string(rrtype)),
 	}
 
 	return &result, core.ErrNone

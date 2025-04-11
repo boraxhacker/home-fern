@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/dgraph-io/badger/v4"
+	"io"
 	"time"
 )
 
@@ -60,6 +61,30 @@ func GetPrefixCount(db *badger.DB, prefix string) (int, error) {
 	}
 
 	return result, nil
+}
+
+func LogKeys(db *badger.DB, w io.Writer) error {
+
+	err := db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			_, err := w.Write(it.Item().Key())
+			if err != nil {
+				return err
+			}
+
+			w.Write([]byte("\n"))
+		}
+
+		return nil
+	})
+
+	return err
 }
 
 func PutKeys(db *badger.DB, data []PutData) error {

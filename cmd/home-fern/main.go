@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
+	"home-fern/internal/dbdump"
 	"home-fern/internal/route53"
 	"home-fern/internal/ssm"
 	"home-fern/internal/tfstate"
@@ -53,7 +54,18 @@ func main() {
 
 	stateApi := tfstate.NewStateApi(*dataPathPtr + "/tfstate")
 
+	var dumpApi = dbdump.Api{
+		Loggers: map[string]core.DatabaseDumper{
+			"route53": r53svc,
+			"ssm":     ssmsvc,
+		},
+	}
+
 	router := mux.NewRouter()
+
+	// dump
+	router.HandleFunc("/dump/{service}/keys",
+		basicProvider.WithBasicAuth(dumpApi.LogKeys)).Methods("GET")
 
 	// SSM
 	router.HandleFunc("/ssm",
