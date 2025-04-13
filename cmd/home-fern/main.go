@@ -64,19 +64,17 @@ func main() {
 	router := mux.NewRouter()
 
 	// dump
-	router.HandleFunc("/dump/{service}/keys",
+	router.HandleFunc("/keys/{service}",
 		basicProvider.WithBasicAuth(dumpApi.LogKeys)).Methods("GET")
 
 	// SSM
-	router.HandleFunc("/ssm",
+	router.HandleFunc("/ssm{slash:/?}",
 		ssmCredentials.WithSigV4(ssmApi.Handle)).Methods("POST")
 
 	// Route53
 	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset",
 		route53Credentials.WithSigV4(route53Api.ListResourceRecordSets)).Methods("GET")
-	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset/",
-		route53Credentials.WithSigV4(route53Api.ChangeResourceRecordSets)).Methods("POST")
-	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset",
+	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset{slash:/?}",
 		route53Credentials.WithSigV4(route53Api.ChangeResourceRecordSets)).Methods("POST")
 	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
 		route53Credentials.WithSigV4(route53Api.UpdateHostedZoneComment)).Methods("POST")
@@ -84,7 +82,7 @@ func main() {
 		route53Credentials.WithSigV4(route53Api.DeleteHostedZone)).Methods("DELETE")
 	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}",
 		route53Credentials.WithSigV4(route53Api.GetHostedZone)).Methods("GET")
-	router.HandleFunc("/route53/2013-04-01/hostedzone",
+	router.HandleFunc("/route53/2013-04-01/hostedzone{slash:/?}",
 		route53Credentials.WithSigV4(route53Api.CreateHostedZone)).Methods("POST")
 	router.HandleFunc("/route53/2013-04-01/hostedzone",
 		route53Credentials.WithSigV4(route53Api.ListHostedZones)).Methods("GET")
