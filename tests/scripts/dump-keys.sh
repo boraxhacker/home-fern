@@ -8,5 +8,6 @@ fi
 
 USER=my-access
 PWD=really-long-key
+URL=http://localhost:9080
 
-curl --basic --user "${USER}:${PWD}" http://localhost:9080/dump/$1/keys
+curl --basic --user "${USER}:${PWD}" ${URL}/dump/$1/keys
