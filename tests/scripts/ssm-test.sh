@@ -16,7 +16,25 @@ aws ssm \
     put-parameter \
     --name /user/jim \
     --value jim \
-    --type SecureString
+    --type SecureString \
+	--tags Key=LastName,Value=Jones
+
+aws ssm \
+	list-tags-for-resource \
+	--resource-type Parameter \
+	--resource-id /user/jim
+
+aws ssm \
+    put-parameter \
+    --name /user/jim \
+    --value "jim v2" \
+    --type SecureString \
+	--overwrite
+
+aws ssm \
+	list-tags-for-resource \
+	--resource-type Parameter \
+	--resource-id /user/jim
 
 aws ssm \
     put-parameter \
