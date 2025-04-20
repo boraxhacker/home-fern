@@ -146,6 +146,8 @@ func (ds *dataStore) putParameter(key string, value *ParameterData, overwrite bo
 				return badger.ErrRejected
 			}
 
+			// we need to copy the old tags, update version
+			value.Tags = existingParam.Tags
 			newVersion = existingParam.Version + 1
 
 		} else if !errors.Is(err, badger.ErrKeyNotFound) {
