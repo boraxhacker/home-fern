@@ -4,6 +4,7 @@ go 1.24
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.36.3
+	github.com/aws/aws-sdk-go-v2/service/kms v1.38.3
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.51.0
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.58.1
 	github.com/dgraph-io/badger/v4 v4.6.0

@@ -26,7 +26,7 @@ jobs:
         run: |
           make
           echo "Checking for build artifact..."
-          ls -lah home-fern*         
+          ls -lah home-fern*                 
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -38,23 +38,27 @@ jobs:
       - name: Build and tag Docker image
         id: docker_build
         run: |
-          IMAGE_TAG="ghcr.io/${{ github.repository }}:${{ github.ref_name }}"
-          IMAGE_TAG=$(echo $IMAGE_TAG | tr '[:upper:]' '[:lower:]')
+          IMAGE_NAME="ghcr.io/${{ github.repository }}"
+          VERSION=${GITHUB_REF#refs/tags/v}
+          IMAGE_TAG_VERSION=${IMAGE_NAME}:${VERSION}
+          IMAGE_TAG_LATEST=${IMAGE_NAME}:latest
 
-          echo "Building image: $IMAGE_TAG"
-          docker buildx build --tag $IMAGE_TAG .
-          
-          # Set the image tag as an output
-          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          docker build -t ${IMAGE_TAG_VERSION} .
+          docker tag ${IMAGE_TAG_VERSION} ${IMAGE_TAG_LATEST}
 
-      - name: Push Docker image to Container Registry
-        run: docker push ${{ steps.docker_build.outputs.image_tag }}
+          echo "IMAGE_TAG_VERSION=${IMAGE_TAG_VERSION}" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG_LATEST=${IMAGE_TAG_LATEST}" >> $GITHUB_OUTPUT
+
+      - name: Push Docker Images
+        run: |
+          docker push ${{ steps.docker_build.outputs.IMAGE_TAG_VERSION }}
+          docker push ${{ steps.docker_build.outputs.IMAGE_TAG_LATEST }}
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           body: |
             Release based on tag ${{ github.ref_name }}.
-            Docker Image: `${{ steps.docker_build.outputs.image_tag }}`
+            Docker Image: `${{ steps.docker_build.outputs.IMAGE_TAG_VERSION }}`
           files: |
             release/*

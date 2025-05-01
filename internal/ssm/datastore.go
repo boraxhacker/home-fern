@@ -1,15 +1,10 @@
 package ssm
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"github.com/dgraph-io/badger/v4"
 	"home-fern/internal/core"
-	"io"
 	"log"
 	"regexp"
 )
@@ -172,89 +167,34 @@ func (ds *dataStore) putParameter(key string, value *ParameterData, overwrite bo
 	return newVersion, core.ErrNone
 }
 
-func (ds *dataStore) findKeyId(keyId string) ([]byte, core.ErrorCode) {
-
-	// TODO doesn't handle ARNs
-	for _, key := range ds.keys {
-
-		if "alias/"+key.Alias == keyId || keyId == key.KeyId {
-
-			bytes, err := base64.StdEncoding.DecodeString(key.Key)
-			if err != nil {
-				return nil, core.ErrInternalError
-			}
-
-			return bytes, core.ErrNone
-		}
-	}
-
-	return nil, ErrInvalidKeyId
-}
-
 func (ds *dataStore) encrypt(stringToEncrypt string, keyId string) (string, core.ErrorCode) {
 
-	key, ec := ds.findKeyId(keyId)
+	key, ec := core.FindKeyId(ds.keys, keyId)
 	if ec != core.ErrNone {
 		return "", ec
 	}
 
-	// Since the key is in string format, convert it to bytes
-	block, err := aes.NewCipher(key)
+	result, err := key.EncryptString(stringToEncrypt)
 	if err != nil {
 		return "", translateBadgerError(err)
 	}
 
-	// Create a new GCM - https://en.wikipedia.org/wiki/Galois/Counter_Mode
-	// https://golang.org/pkg/crypto/cipher/#NewGCM
-	aesGCM, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", translateBadgerError(err)
-	}
-
-	// Create a nonce. Nonce should never be reused with the same key.
-	// Since we use GCM, we recommend using 12 bytes.
-	nonce := make([]byte, aesGCM.NonceSize())
-	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", translateBadgerError(err)
-	}
-
-	// Encrypt the data using aesGCM.Seal. Since we don't want to save the nonce somewhere else in this case, we add it as a prefix to the encrypted data. The first nonce argument in Seal is the prefix.
-	ciphertext := aesGCM.Seal(nonce, nonce, []byte(stringToEncrypt), nil)
-	return base64.StdEncoding.EncodeToString(ciphertext), core.ErrNone
+	return result, core.ErrNone
 }
 
 func (ds *dataStore) decrypt(encryptedString string, keyId string) (string, core.ErrorCode) {
 
-	key, ec := ds.findKeyId(keyId)
+	key, ec := core.FindKeyId(ds.keys, keyId)
 	if ec != core.ErrNone {
 		return "", ec
 	}
 
-	enc, err := base64.StdEncoding.DecodeString(encryptedString)
+	result, err := key.DecryptString(encryptedString)
 	if err != nil {
 		return "", translateBadgerError(err)
 	}
 
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", translateBadgerError(err)
-	}
-
-	aesGCM, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", translateBadgerError(err)
-	}
-
-	nonceSize := aesGCM.NonceSize()
-
-	nonce, ciphertext := enc[:nonceSize], enc[nonceSize:]
-
-	plaintext, err := aesGCM.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return "", translateBadgerError(err)
-	}
-
-	return string(plaintext), core.ErrNone
+	return result, core.ErrNone
 }
 
 func translateBadgerError(err error) core.ErrorCode {
