@@ -45,6 +45,7 @@ const (
 type ServiceType string
 
 const (
+	ServiceKms     ServiceType = "kms"
 	ServiceSsm     ServiceType = "ssm"
 	ServiceRoute53 ServiceType = "route53"
 )
@@ -203,7 +204,7 @@ func (p *CredentialsProvider) checkV4Sig(r *http.Request) (string, ApiError) {
 // Returns SHA256 for calculating canonical-request.
 func getContentSha256Cksum(r *http.Request, stype ServiceType) string {
 
-	if stype == ServiceSsm || stype == ServiceRoute53 {
+	if stype == ServiceSsm || stype == ServiceRoute53 || stype == ServiceKms {
 
 		payload, err := io.ReadAll(io.LimitReader(r.Body, 10*(1<<20)))
 		if err != nil {

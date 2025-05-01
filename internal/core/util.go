@@ -2,6 +2,7 @@ package core
 
 import (
 	"math/rand"
+	"strings"
 	"time"
 )
 
@@ -34,4 +35,29 @@ func GenerateRandomString(length int) string {
 
 	// Convert the byte slice to a string and return it.
 	return string(b)
+}
+
+func FindKeyId(keys []KmsKey, keyId string) (*KmsKey, ErrorCode) {
+
+	chk := keyId
+	if strings.HasPrefix(keyId, "arn:aws:kms:") {
+
+		// (obviously) ignores region and account id
+		pieces := strings.Split(keyId, ":")
+		if len(pieces) != 6 {
+			return nil, ErrInvalidKeyId
+		}
+
+		chk = strings.TrimPrefix(pieces[5], "key/")
+	}
+
+	for _, key := range keys {
+
+		if "alias/"+key.Alias == chk || key.KeyId == chk {
+
+			return &key, ErrNone
+		}
+	}
+
+	return nil, ErrInvalidKeyId
 }

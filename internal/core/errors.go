@@ -6,4 +6,5 @@ const (
 	ErrNone ErrorCode = iota
 	ErrInternalError
 	ErrNotFound
+	ErrInvalidKeyId
 )

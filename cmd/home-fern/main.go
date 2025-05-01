@@ -8,6 +8,7 @@ import (
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
 	"home-fern/internal/dbdump"
+	"home-fern/internal/kms"
 	"home-fern/internal/route53"
 	"home-fern/internal/ssm"
 	"home-fern/internal/tfstate"
@@ -36,6 +37,12 @@ func main() {
 			AccountID:       core.ZeroAccountId,
 		})
 	}
+	kmsCredentials := awslib.NewCredentialsProvider(awslib.ServiceKms, fernConfig.Region, credentials)
+
+	kmssvc := kms.NewService(fernConfig, core.ZeroAccountId)
+
+	kmsApi := kms.NewKmsApi(kmssvc, kmsCredentials)
+
 	ssmCredentials := awslib.NewCredentialsProvider(awslib.ServiceSsm, fernConfig.Region, credentials)
 
 	ssmsvc := ssm.NewService(fernConfig, core.ZeroAccountId, *dataPathPtr)
@@ -66,6 +73,10 @@ func main() {
 	// dump
 	router.HandleFunc("/keys/{service}",
 		basicProvider.WithBasicAuth(dumpApi.LogKeys)).Methods("GET")
+
+	// KMS
+	router.HandleFunc("/kms{slash:/?}",
+		kmsCredentials.WithSigV4(kmsApi.Handle)).Methods("POST")
 
 	// SSM
 	router.HandleFunc("/ssm{slash:/?}",
