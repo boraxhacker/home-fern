@@ -2,6 +2,6 @@ FROM alpine:latest
 
 WORKDIR /app
 
-COPY home-fern-alpine home-fern
+COPY release/home-fern-alpine home-fern
 
 CMD ["/app/home-fern"]
