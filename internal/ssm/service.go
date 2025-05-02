@@ -262,7 +262,9 @@ func (service *Service) PutParameter(
 		param.Value = encryptedValue
 	}
 
-	newVersion, err := service.dataStore.putParameter(string(param.Name), param, aws.ToBool(request.Overwrite))
+	newVersion, err := service.dataStore.putParameter(
+		string(param.Name), param, aws.ToBool(request.Overwrite), false)
+
 	if err != core.ErrNone {
 
 		return nil, err
@@ -307,7 +309,7 @@ func (service *Service) AddTagsToResource(
 			}
 		}
 
-		_, err = service.dataStore.putParameter(string(param.Name), param, true)
+		_, err = service.dataStore.putParameter(string(param.Name), param, true, true)
 		if err != core.ErrNone {
 			return nil, err
 		}
@@ -338,7 +340,7 @@ func (service *Service) RemoveTagsFromResource(
 			}
 		}
 
-		_, err = service.dataStore.putParameter(string(param.Name), param, true)
+		_, err = service.dataStore.putParameter(string(param.Name), param, true, true)
 		if err != core.ErrNone {
 			return nil, err
 		}
