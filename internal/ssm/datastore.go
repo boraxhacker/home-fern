@@ -177,7 +177,7 @@ func (ds *dataStore) encrypt(stringToEncrypt string, keyId string) (string, core
 		return "", ec
 	}
 
-	result, err := key.EncryptString(stringToEncrypt)
+	result, err := key.EncryptString(stringToEncrypt, nil)
 	if err != nil {
 		return "", translateBadgerError(err)
 	}
@@ -192,7 +192,7 @@ func (ds *dataStore) decrypt(encryptedString string, keyId string) (string, core
 		return "", ec
 	}
 
-	result, err := key.DecryptString(encryptedString)
+	result, err := key.DecryptString(encryptedString, nil)
 	if err != nil {
 		return "", translateBadgerError(err)
 	}

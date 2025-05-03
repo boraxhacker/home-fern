@@ -1,11 +1,11 @@
 package kms
 
 import (
+	"encoding/json"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awskms "github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"home-fern/internal/core"
-	"strings"
 )
 
 type Service struct {
@@ -32,9 +32,18 @@ func (s *Service) Encrypt(request *awskms.EncryptInput) (*awskms.EncryptOutput, 
 		return nil, ec
 	}
 
-	stringToEncrypt := string(request.Plaintext) + s.createContextSuffix(request.EncryptionContext)
+	var aad []byte
+	var err error
 
-	encstr, err := key.EncryptString(stringToEncrypt)
+	if len(request.EncryptionContext) > 0 {
+
+		aad, err = json.Marshal(request.EncryptionContext)
+		if err != nil {
+			return nil, ErrKMSInternalException
+		}
+	}
+
+	encstr, err := key.EncryptString(string(request.Plaintext), aad)
 	if err != nil {
 		return nil, ErrKMSInternalException
 	}
@@ -55,32 +64,27 @@ func (s *Service) Decrypt(request *awskms.DecryptInput) (*awskms.DecryptOutput, 
 		return nil, ec
 	}
 
-	decstr, err := key.DecryptString(string(request.CiphertextBlob))
-	if err != nil {
-		return nil, ErrKMSInternalException
+	var aad []byte
+	var err error
+
+	if request.EncryptionContext != nil && len(request.EncryptionContext) > 0 {
+
+		aad, err = json.Marshal(request.EncryptionContext)
+		if err != nil {
+			return nil, ErrKMSInternalException
+		}
 	}
 
-	suffix := s.createContextSuffix(request.EncryptionContext)
-	if !strings.HasSuffix(decstr, suffix) {
+	decstr, err := key.DecryptString(string(request.CiphertextBlob), aad)
+	if err != nil {
 		return nil, ErrInvalidCiphertextException
 	}
 
 	result := awskms.DecryptOutput{
 		EncryptionAlgorithm: types.EncryptionAlgorithmSpecSymmetricDefault,
 		KeyId:               request.KeyId,
-		Plaintext:           []byte(strings.TrimSuffix(decstr, suffix)),
+		Plaintext:           []byte(decstr),
 	}
 
 	return &result, core.ErrNone
-}
-
-func (s *Service) createContextSuffix(ctx map[string]string) string {
-
-	result := ""
-	for ctxkey, ctxvalue := range ctx {
-
-		result = result + ":::" + ctxkey + "=" + ctxvalue
-	}
-
-	return result
 }
