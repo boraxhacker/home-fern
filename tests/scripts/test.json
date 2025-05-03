@@ -1,0 +1,17 @@
+{
+  "Comment": "boo",
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "abc.example.net.",
+        "Type": "A",
+        "ResourceRecords": [
+          {
+            "Value": "192.168.1.3"
+          }
+        ]
+      }
+    }
+  ]
+}

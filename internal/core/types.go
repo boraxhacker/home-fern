@@ -32,7 +32,7 @@ type KmsKey struct {
 	Key   string `yaml:"key"`
 }
 
-func (key *KmsKey) EncryptString(stringToEncrypt string) (string, error) {
+func (key *KmsKey) EncryptString(stringToEncrypt string, aad []byte) (string, error) {
 
 	// Since the key is in string format, convert it to bytes
 	bytes, err := base64.StdEncoding.DecodeString(key.Key)
@@ -59,12 +59,13 @@ func (key *KmsKey) EncryptString(stringToEncrypt string) (string, error) {
 		return "", err
 	}
 
-	// Encrypt the data using aesGCM.Seal. Since we don't want to save the nonce somewhere else in this case, we add it as a prefix to the encrypted data. The first nonce argument in Seal is the prefix.
-	ciphertext := aesGCM.Seal(nonce, nonce, []byte(stringToEncrypt), nil)
+	// Encrypt the data using aesGCM.Seal. Since we don't want to save the nonce somewhere else in this case,
+	//we add it as a prefix to the encrypted data. The first nonce argument in Seal is the prefix.
+	ciphertext := aesGCM.Seal(nonce, nonce, []byte(stringToEncrypt), aad)
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
-func (key *KmsKey) DecryptString(encryptedString string) (string, error) {
+func (key *KmsKey) DecryptString(encryptedString string, aad []byte) (string, error) {
 
 	enc, err := base64.StdEncoding.DecodeString(encryptedString)
 	if err != nil {
@@ -91,7 +92,7 @@ func (key *KmsKey) DecryptString(encryptedString string) (string, error) {
 
 	nonce, ciphertext := enc[:nonceSize], enc[nonceSize:]
 
-	plaintext, err := aesGCM.Open(nil, nonce, ciphertext, nil)
+	plaintext, err := aesGCM.Open(nil, nonce, ciphertext, aad)
 	if err != nil {
 		return "", err
 	}

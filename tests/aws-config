@@ -7,3 +7,5 @@ route_53 =
   endpoint_url = http://localhost:9080/route53
 ssm =
   endpoint_url = http://localhost:9080/ssm
+kms =
+  endpoint_url = http://localhost:9080/kms
