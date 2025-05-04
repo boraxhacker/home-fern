@@ -291,12 +291,14 @@ func (service *Service) AddTagsToResource(
 
 		for _, tag := range request.Tags {
 
-			tagName := aws.ToString(tag.Key)
-			found := false
-			for _, paramTag := range param.Tags {
+			reqTagKey := aws.ToString(tag.Key)
+			reqTagValue := aws.ToString(tag.Value)
 
-				if paramTag.Key == tagName {
-					paramTag.Value = aws.ToString(tag.Value)
+			found := false
+			for idx, _ := range param.Tags {
+
+				if param.Tags[idx].Key == reqTagKey {
+					param.Tags[idx].Value = reqTagValue
 					found = true
 					break
 				}
@@ -305,7 +307,7 @@ func (service *Service) AddTagsToResource(
 			if !found {
 
 				param.Tags = append(param.Tags,
-					core.ResourceTag{Key: tagName, Value: aws.ToString(tag.Value)})
+					core.ResourceTag{Key: reqTagKey, Value: reqTagValue})
 			}
 		}
 

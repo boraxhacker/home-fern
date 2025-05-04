@@ -25,11 +25,28 @@ aws ssm \
 	--resource-id /user/jim
 
 aws ssm \
+	add-tags-to-resource \
+	--resource-type Parameter \
+	--resource-id /user/jim \
+	--tags Key=LastName,Value=Smith Key=FirstName,Value=Jim
+
+aws ssm \
     put-parameter \
     --name /user/jim \
     --value "jim v2" \
     --type SecureString \
 	--overwrite
+
+aws ssm \
+	list-tags-for-resource \
+	--resource-type Parameter \
+	--resource-id /user/jim
+
+aws ssm \
+	remove-tags-from-resource \
+	--resource-type Parameter \
+	--resource-id /user/jim \
+	--tag-keys LastName FirstName
 
 aws ssm \
 	list-tags-for-resource \

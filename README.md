@@ -12,11 +12,19 @@ home-fern (sorta) implements
 * Terraform state HTTP backend 
 * AWS SSM Stored Parameter API
 * AWS Route53 API
+* AWS KMS (encrypt and decrypt only)
 
 The goal is to enable the use of well known frameworks, such as Terraform, in the home lab setting.
-See terraform example under the tests folder.
 
-For example, using home-fern, it's possible to: 
+home-fern (mine) is working with:
+* external-dns
+* external-secrets
+* OpenTofu
+* sops
+
+### Example
+
+Using home-fern, it's possible to: 
 * put-parameter using AWS CLI 
 * get-parameter using Terraform
 

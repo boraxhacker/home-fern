@@ -124,7 +124,6 @@ func (ds *dataStore) putParameter(
 	key string, value *ParameterData, overwrite bool, skipTagCopy bool) (int64, core.ErrorCode) {
 
 	var newVersion int64 = 1
-	var existingParam ParameterData
 
 	err := ds.db.Update(func(txn *badger.Txn) error {
 
@@ -132,6 +131,7 @@ func (ds *dataStore) putParameter(
 
 		if err == nil {
 
+			var existingParam ParameterData
 			if err := item.Value(func(val []byte) error {
 				return json.Unmarshal(val, &existingParam)
 			}); err != nil {
@@ -143,10 +143,11 @@ func (ds *dataStore) putParameter(
 			}
 
 			if !skipTagCopy {
-				// we need to copy the old tags, update version
+				// we need to copy the old tags
 				value.Tags = existingParam.Tags
-				newVersion = existingParam.Version + 1
 			}
+
+			newVersion = existingParam.Version + 1
 
 		} else if !errors.Is(err, badger.ErrKeyNotFound) {
 
