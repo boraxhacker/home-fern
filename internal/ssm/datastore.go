@@ -51,7 +51,7 @@ func (ds *dataStore) delete(key string) core.ErrorCode {
 }
 
 func (ds *dataStore) findParametersByKey(
-	filters []string, maxResults int, nextToken *string) ([]ParameterData, string, core.ErrorCode) {
+	filters []string, maxResults int, nextToken string) ([]ParameterData, string, core.ErrorCode) {
 
 	var result []ParameterData
 
@@ -66,8 +66,8 @@ func (ds *dataStore) findParametersByKey(
 		defer it.Close()
 
 		it.Rewind()
-		if nextToken != nil {
-			findme, derr := base64.StdEncoding.DecodeString(*nextToken)
+		if nextToken != "" {
+			findme, derr := base64.StdEncoding.DecodeString(nextToken)
 			if derr != nil {
 				return derr
 			}
