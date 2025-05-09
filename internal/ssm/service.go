@@ -144,7 +144,8 @@ func (service *Service) DescribeParameters(
 		maxResults = int(aws.ToInt32(request.MaxResults))
 	}
 
-	parameters, nextToken, err := service.dataStore.findParametersByKey(filters, maxResults, request.NextToken)
+	parameters, nextToken, err :=
+		service.dataStore.findParametersByKey(filters, maxResults, aws.ToString(request.NextToken))
 	if err != core.ErrNone {
 
 		return nil, err
@@ -228,7 +229,8 @@ func (service *Service) GetParametersByPath(
 		maxResults = int(aws.ToInt32(request.MaxResults))
 	}
 
-	parameters, nextToken, err := service.dataStore.findParametersByKey(filters, maxResults, request.NextToken)
+	parameters, nextToken, err :=
+		service.dataStore.findParametersByKey(filters, maxResults, aws.ToString(request.NextToken))
 	if err != core.ErrNone {
 
 		return nil, err
