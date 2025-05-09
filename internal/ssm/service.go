@@ -138,13 +138,23 @@ func (service *Service) DescribeParameters(
 		}
 	}
 
-	parameters, err := service.dataStore.findParametersByKey(filters)
+	maxResults := 50
+	if request.MaxResults != nil && *request.MaxResults > 0 && *request.MaxResults < int32(maxResults) {
+
+		maxResults = int(aws.ToInt32(request.MaxResults))
+	}
+
+	parameters, nextToken, err := service.dataStore.findParametersByKey(filters, maxResults, request.NextToken)
 	if err != core.ErrNone {
 
 		return nil, err
 	}
 
 	var response DescribeParametersResponse
+	if nextToken != "" {
+		response.NextToken = nextToken
+	}
+
 	for _, param := range parameters {
 
 		response.Parameters = append(response.Parameters,
@@ -212,13 +222,23 @@ func (service *Service) GetParametersByPath(
 		filters = append(filters, paramPath.asOneLevelRegex())
 	}
 
-	parameters, err := service.dataStore.findParametersByKey(filters)
+	maxResults := 10
+	if request.MaxResults != nil && *request.MaxResults > 0 && *request.MaxResults < int32(maxResults) {
+
+		maxResults = int(aws.ToInt32(request.MaxResults))
+	}
+
+	parameters, nextToken, err := service.dataStore.findParametersByKey(filters, maxResults, request.NextToken)
 	if err != core.ErrNone {
 
 		return nil, err
 	}
 
 	var response GetParametersByPathResponse
+	if nextToken != "" {
+		response.NextToken = nextToken
+	}
+
 	for _, param := range parameters {
 
 		if aws.ToBool(request.WithDecryption) && param.Type == awstypes.ParameterTypeSecureString {

@@ -1,6 +1,7 @@
 package ssm
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"github.com/dgraph-io/badger/v4"
@@ -49,22 +50,44 @@ func (ds *dataStore) delete(key string) core.ErrorCode {
 	return core.ErrNone
 }
 
-func (ds *dataStore) findParametersByKey(filters []string) ([]ParameterData, core.ErrorCode) {
+func (ds *dataStore) findParametersByKey(
+	filters []string, maxResults int, nextToken *string) ([]ParameterData, string, core.ErrorCode) {
 
 	var result []ParameterData
+
+	count := 0
+	nextTokenResp := ""
 
 	err := ds.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false
+
 		it := txn.NewIterator(opts)
 		defer it.Close()
-		for it.Rewind(); it.Valid(); it.Next() {
+
+		it.Rewind()
+		if nextToken != nil {
+			findme, derr := base64.StdEncoding.DecodeString(*nextToken)
+			if derr != nil {
+				return derr
+			}
+
+			it.Seek(findme)
+		}
+
+		for ; it.Valid() && nextTokenResp == ""; it.Next() {
+
 			item := it.Item()
 			key := string(item.Key())
 			for _, filter := range filters {
 
 				match, _ := regexp.MatchString(filter, key)
 				if match {
+
+					if count == maxResults {
+						nextTokenResp = key
+						break
+					}
 
 					var param ParameterData
 					umerr := item.Value(func(val []byte) error {
@@ -74,6 +97,7 @@ func (ds *dataStore) findParametersByKey(filters []string) ([]ParameterData, cor
 					if umerr == nil {
 
 						result = append(result, param)
+						count++
 
 					} else {
 
@@ -90,10 +114,15 @@ func (ds *dataStore) findParametersByKey(filters []string) ([]ParameterData, cor
 
 	if err != nil {
 
-		return nil, translateBadgerError(err)
+		return nil, "", translateBadgerError(err)
 	}
 
-	return result, core.ErrNone
+	nextToken64 := ""
+	if nextTokenResp != "" {
+		nextToken64 = base64.StdEncoding.EncodeToString([]byte(nextTokenResp))
+	}
+
+	return result, nextToken64, core.ErrNone
 }
 
 func (ds *dataStore) getParameter(key string) (*ParameterData, core.ErrorCode) {
