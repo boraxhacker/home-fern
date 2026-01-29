@@ -263,36 +263,8 @@ func (service *Service) GetParametersByPath(
 func (service *Service) PutParameter(
 	creds *aws.Credentials, request *awsssm.PutParameterInput) (*awsssm.PutParameterOutput, core.ErrorCode) {
 
-	param, err := NewParameterData(request)
-	if err != core.ErrNone {
-		return nil, err
-	}
-
-	param.LastModifiedUser = service.createUserArn(creds)
-
-	if param.Type == awstypes.ParameterTypeSecureString {
-
-		if param.KeyId == "" {
-			param.KeyId = "alias/" + service.dataStore.keys[0].Alias
-		}
-
-		encryptedValue, err := service.dataStore.encrypt(param.Value, param.KeyId)
-		if err != core.ErrNone {
-			return nil, err
-		}
-
-		param.Value = encryptedValue
-	}
-
-	newVersion, err := service.dataStore.putParameter(
-		string(param.Name), param, aws.ToBool(request.Overwrite), false)
-
-	if err != core.ErrNone {
-
-		return nil, err
-	}
-
-	return &awsssm.PutParameterOutput{Tier: awstypes.ParameterTierStandard, Version: newVersion}, core.ErrNone
+	// tags from previous version are kept and request params are ignored
+	return service.persistParameter(creds, request, false)
 }
 
 func (service *Service) LogKeys(writer io.Writer) error {
@@ -394,6 +366,78 @@ func (service *Service) ListTagsForResource(
 	return &response, core.ErrNone
 }
 
+func (service *Service) GetAllParameters() ([]ParameterData, core.ErrorCode) {
+
+	var allParams []ParameterData
+	var nextToken string
+
+	for {
+		params, token, err := service.dataStore.findParametersByKey([]string{".*"}, 50, nextToken)
+		if err != core.ErrNone {
+			return nil, err
+		}
+
+		for i := range params {
+			if params[i].Type == awstypes.ParameterTypeSecureString {
+				decryptedValue, err := service.dataStore.decrypt(params[i].Value, params[i].KeyId)
+				if err != core.ErrNone {
+					return nil, err
+				}
+				params[i].Value = decryptedValue
+			}
+		}
+
+		allParams = append(allParams, params...)
+		nextToken = token
+
+		if nextToken == "" {
+			break
+		}
+	}
+
+	return allParams, core.ErrNone
+}
+
+func (service *Service) ImportParameters(
+	creds *aws.Credentials, parameters []ParameterData, overwrite bool) ([]string, core.ErrorCode) {
+
+	var failures []string
+
+	for _, param := range parameters {
+
+		var tags []awstypes.Tag
+		for _, t := range param.Tags {
+			tags = append(tags, awstypes.Tag{
+				Key:   aws.String(t.Key),
+				Value: aws.String(t.Value),
+			})
+		}
+
+		putInput := &awsssm.PutParameterInput{
+			Name:           aws.String(string(param.Name)),
+			Value:          aws.String(param.Value),
+			Type:           param.Type,
+			Overwrite:      aws.Bool(overwrite),
+			Description:    aws.String(param.Description),
+			AllowedPattern: aws.String(param.AllowedPattern),
+			KeyId:          aws.String(param.KeyId),
+			Policies:       aws.String(param.Policies),
+			Tier:           param.Tier,
+			DataType:       aws.String(param.DataType),
+			Tags:           tags,
+		}
+
+		// overwrite = true => we want our tags to persist and ignore previous version tags
+		_, err := service.persistParameter(creds, putInput, overwrite)
+		if err != core.ErrNone {
+			failures = append(failures, string(param.Name))
+			continue
+		}
+	}
+
+	return failures, core.ErrNone
+}
+
 func (service *Service) createUserArn(creds *aws.Credentials) string {
 
 	return fmt.Sprintf("arn:aws:iam::%s:user/%s", service.accountId, creds.Source)
@@ -431,4 +475,39 @@ func (service *Service) createParameterArn(name ParamName) string {
 
 	return fmt.Sprintf("arn:aws:ssm:%s:%s:parameter/%s",
 		service.region, service.accountId, strings.TrimPrefix(string(name), "/"))
+}
+
+func (service *Service) persistParameter(
+	creds *aws.Credentials, request *awsssm.PutParameterInput, skipTagCopy bool) (*awsssm.PutParameterOutput, core.ErrorCode) {
+
+	param, err := NewParameterData(request)
+	if err != core.ErrNone {
+		return nil, err
+	}
+
+	param.LastModifiedUser = service.createUserArn(creds)
+
+	if param.Type == awstypes.ParameterTypeSecureString {
+
+		if param.KeyId == "" {
+			param.KeyId = "alias/" + service.dataStore.keys[0].Alias
+		}
+
+		encryptedValue, err := service.dataStore.encrypt(param.Value, param.KeyId)
+		if err != core.ErrNone {
+			return nil, err
+		}
+
+		param.Value = encryptedValue
+	}
+
+	newVersion, err := service.dataStore.putParameter(
+		string(param.Name), param, aws.ToBool(request.Overwrite), skipTagCopy)
+
+	if err != core.ErrNone {
+
+		return nil, err
+	}
+
+	return &awsssm.PutParameterOutput{Tier: awstypes.ParameterTierStandard, Version: newVersion}, core.ErrNone
 }

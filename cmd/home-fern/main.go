@@ -2,9 +2,6 @@ package main
 
 import (
 	"flag"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/gorilla/mux"
-	"gopkg.in/yaml.v3"
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
 	"home-fern/internal/dbdump"
@@ -15,6 +12,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/gorilla/mux"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -81,6 +82,10 @@ func main() {
 	// SSM
 	router.HandleFunc("/ssm{slash:/?}",
 		ssmCredentials.WithSigV4(ssmApi.Handle)).Methods("POST")
+	router.HandleFunc("/export/ssm",
+		basicProvider.WithBasicAuth(ssmApi.ExportSsm)).Methods("GET")
+	router.HandleFunc("/import/ssm",
+		basicProvider.WithBasicAuth(ssmApi.ImportSsm)).Methods("POST", "PUT")
 
 	// Route53
 	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset",
