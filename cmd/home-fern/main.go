@@ -2,9 +2,6 @@ package main
 
 import (
 	"flag"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/gorilla/mux"
-	"gopkg.in/yaml.v3"
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
 	"home-fern/internal/dbdump"
@@ -15,6 +12,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/gorilla/mux"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -23,6 +24,8 @@ func main() {
 		flag.String("config", ".home-fern-config.yaml", "Path to the home-fern config file.")
 	dataPathPtr :=
 		flag.String("data-path", ".home-fern-data", "Path to data store folder.")
+	webPathPtr :=
+		flag.String("web-path", "./web/dist/home-fern-web/browser", "Path to web files.")
 	flag.Parse()
 
 	fernConfig := readAuthCredsOrDie(*configFilePtr)
@@ -83,6 +86,8 @@ func main() {
 		ssmCredentials.WithSigV4(ssmApi.Handle)).Methods("POST")
 
 	// Route53
+	router.HandleFunc("/route53/2013-04-01/hostedzonesbyname",
+		route53Credentials.WithSigV4(route53Api.ListHostedZonesByName)).Methods("GET")
 	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset",
 		route53Credentials.WithSigV4(route53Api.ListResourceRecordSets)).Methods("GET")
 	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset{slash:/?}",
@@ -117,6 +122,8 @@ func main() {
 		basicProvider.WithBasicAuth(stateApi.LockState)).Methods("LOCK")
 	router.HandleFunc("/tfstate/{project}/unlock",
 		basicProvider.WithBasicAuth(stateApi.UnlockState)).Methods("UNLOCK")
+
+	router.PathPrefix("/").Handler(http.FileServer(http.Dir(*webPathPtr)))
 
 	addr := ":9080"
 	log.Printf("Listening on %s", addr)

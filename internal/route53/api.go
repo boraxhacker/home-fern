@@ -232,6 +232,44 @@ func (api *Api) GetHostedZoneCount(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (api *Api) ListHostedZonesByName(w http.ResponseWriter, r *http.Request) {
+
+	log.Println("Amazon-Target: Route53.GetHostedZonesByName")
+
+	var request aws53.ListHostedZonesByNameInput
+
+	// Parsing the query parameters
+	query := r.URL.Query()
+	request.HostedZoneId = aws.String(query.Get("hostedzoneid"))
+	request.DNSName = aws.String(query.Get("dnsname"))
+
+	mi, merr := strconv.Atoi(query.Get("maxitems"))
+	if merr == nil {
+		request.MaxItems = aws.Int32(int32(mi))
+	}
+
+	response, err := api.service.ListHostedZonesByName(&request)
+	if err != core.ErrNone {
+		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+		return
+	}
+
+	awslib.WriteSuccessResponseXML(w, struct {
+		XMLName     xml.Name              `xml:"ListHostedZoneResponse"`
+		HostedZones []awstypes.HostedZone `xml:"HostedZones>HostedZone"`
+		IsTruncated bool
+		Marker      *string
+		MaxItems    *int32
+		NextMarker  *string
+	}{
+		HostedZones: response.HostedZones,
+		IsTruncated: response.IsTruncated,
+		Marker:      response.Marker,
+		MaxItems:    response.MaxItems,
+		NextMarker:  response.NextMarker,
+	})
+}
+
 func (api *Api) ListHostedZones(w http.ResponseWriter, r *http.Request) {
 
 	// GET /2013-04-01/hostedzone?delegationsetid=DelegationSetId&hostedzonetype=HostedZoneType&marker=Marker&maxitems=MaxItems

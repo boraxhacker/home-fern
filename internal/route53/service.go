@@ -288,6 +288,31 @@ func (s *Service) ListHostedZones(
 	return &result, core.ErrNone
 }
 
+func (s *Service) ListHostedZonesByName(
+	request *aws53.ListHostedZonesByNameInput) (*aws53.ListHostedZonesByNameOutput, core.ErrorCode) {
+
+	zoneFilter := ".*"
+	if request.HostedZoneId != nil {
+		zoneFilter = aws.ToString(request.HostedZoneId)
+	}
+
+	zones, err := s.dataStore.findHostedZones(zoneFilter)
+	if err != core.ErrNone {
+
+		return nil, err
+	}
+
+	for _, hz := range zones {
+		count, cerr := s.dataStore.getRecordCount(hz.Id)
+		if cerr != core.ErrNone {
+			return nil, cerr
+		}
+
+		result.HostedZones = append(result.HostedZones, *hz.toHostedZone(count))
+	}
+
+}
+
 func (s *Service) ListResourceRecordSets(
 	request *aws53.ListResourceRecordSetsInput) (*ListRecordSetsOutput, core.ErrorCode) {
 
