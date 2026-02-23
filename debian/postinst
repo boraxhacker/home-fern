@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+
+if ! id "home-fern" >/dev/null 2>&1; then
+    useradd --system --user-group --no-create-home --home /var/lib/home-fern home-fern
+fi
+
+mkdir -p /var/lib/home-fern/data
+chown -R home-fern:home-fern /var/lib/home-fern
+chmod 750 /var/lib/home-fern
+
+mkdir -p /etc/home-fern
+chown -R home-fern:home-fern /etc/home-fern
+chmod 750 /etc/home-fern
+
+# Reload systemd to recognize the new service
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+    systemctl enable home-fern
+fi
+
+exit 0
