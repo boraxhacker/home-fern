@@ -24,6 +24,8 @@ func main() {
 		flag.String("config", ".home-fern-config.yaml", "Path to the home-fern config file.")
 	dataPathPtr :=
 		flag.String("data-path", ".home-fern-data", "Path to data store folder.")
+	listenAddrPtr :=
+		flag.String("listen-addr", ":9080", "Address and port to listen on.")
 	flag.Parse()
 
 	fernConfig := readAuthCredsOrDie(*configFilePtr)
@@ -123,10 +125,9 @@ func main() {
 	router.HandleFunc("/tfstate/{project}/unlock",
 		basicProvider.WithBasicAuth(stateApi.UnlockState)).Methods("UNLOCK")
 
-	addr := ":9080"
-	log.Printf("Listening on %s", addr)
+	log.Printf("Listening on %s", *listenAddrPtr)
 	http.Handle("/", router)
-	http.ListenAndServe(addr, nil)
+	http.ListenAndServe(*listenAddrPtr, nil)
 }
 
 func readAuthCredsOrDie(configFileName string) *core.FernConfig {
@@ -140,6 +141,26 @@ func readAuthCredsOrDie(configFileName string) *core.FernConfig {
 	err = yaml.Unmarshal(configFile, &fernConfig)
 	if err != nil {
 		log.Panicln("Error unmarshalling config:", err)
+	}
+
+	if fernConfig.Region == "" {
+		log.Panicln("Region is required in config file")
+	}
+
+	if len(fernConfig.Credentials) == 0 {
+		log.Panicln("At least one credential is required in config file")
+	}
+
+	if len(fernConfig.Keys) == 0 {
+		log.Panicln("At least one key is required in config file")
+	}
+
+	if fernConfig.DnsDefaults.Soa == "" {
+		log.Panicln("DNS SOA is required in config file")
+	}
+
+	if len(fernConfig.DnsDefaults.NameServers) == 0 {
+		log.Panicln("At least one DNS NameServer is required in config file")
 	}
 
 	return &fernConfig

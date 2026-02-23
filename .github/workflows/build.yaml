@@ -24,7 +24,8 @@ jobs:
       - name: Build
         id: build
         run: |
-          make
+          VERSION=${GITHUB_REF#refs/tags/v}
+          make deb VERSION=$VERSION
           echo "Checking for build artifact..."
           ls -lah release/*                 
 

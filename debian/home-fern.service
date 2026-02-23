@@ -1,0 +1,13 @@
+[Unit]
+Description=Home Fern Service
+After=network.target
+
+[Service]
+Type=simple
+User=home-fern
+Group=home-fern
+ExecStart=/usr/bin/home-fern --config /etc/home-fern/config.yaml --data-path /var/lib/home-fern/data
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
