@@ -1,0 +1,25 @@
+region: us-east-1
+
+#credentials:
+#  - accessKey: "CHANGE ME"
+#    secretKey: "CHANGE ME really-long-key"
+#    username: "CHANGE ME Bob.Smith"
+
+# AES-256 uses a 32-byte (256-bit) key
+# openssl rand -base64 32
+#kms:
+#  - alias: aws/ssm
+#    id: CHANGE ME 844c1364-08b8-11f0-aeb7-33cf4b255e16
+#    key: CHANGE ME DkVsBYNRbORxQ6vtjUCex54YdfYfxd3c5PcP/ZruwUs=
+# add additional keys
+#  - alias: home-fern
+#    id:  d0c49d70-4fae-4a20-84f0-d03fb6d670cb
+#    key: rvl7SbrNObB5MMQDUUAoInJXpyCA3QDqELyuwa2G48M=
+
+#dns:
+#  soa: CHANGE ME ns-1.example.com. admin.example.com. (1 3600 180 604800 1800)
+#  nameServers:
+#    - CHANGE ME ns-1.example.com
+#    - CHANGE ME ns-2.example.com
+#    - CHANGE ME ns-3.example.com
+#    - CHANGE ME ns-4.example.com

@@ -99,6 +99,14 @@ func WriteErrorResponseXML(w http.ResponseWriter, err ApiError, reqURL *url.URL,
 }
 
 func writeResponse(w http.ResponseWriter, statusCode int, response []byte, mType mimeType) {
+
+	w.Header().Set(headerServerInfo, "home-fern")
+	w.Header().Set(headerAcceptRanges, "bytes")
+	if mType != mimeNone {
+		w.Header().Set(headerContentType, string(mType))
+	}
+	w.Header().Set(headerContentLength, strconv.Itoa(len(response)))
+
 	if statusCode == 0 {
 		statusCode = 200
 	}
@@ -109,15 +117,8 @@ func writeResponse(w http.ResponseWriter, statusCode int, response []byte, mType
 	}
 	w.WriteHeader(statusCode)
 
-	w.Header().Set(headerServerInfo, "home-fern")
-	w.Header().Set(headerAcceptRanges, "bytes")
-	if mType != mimeNone {
-		w.Header().Set(headerContentType, string(mType))
-	}
-	w.Header().Set(headerContentLength, strconv.Itoa(len(response)))
-
 	if response != nil {
-		w.Write(response)
+		_, _ = w.Write(response)
 	}
 }
 

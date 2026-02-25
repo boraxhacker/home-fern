@@ -24,6 +24,8 @@ func main() {
 		flag.String("config", ".home-fern-config.yaml", "Path to the home-fern config file.")
 	dataPathPtr :=
 		flag.String("data-path", ".home-fern-data", "Path to data store folder.")
+	listenAddrPtr :=
+		flag.String("listen-addr", ":9080", "Address and port to listen on.")
 	webPathPtr :=
 		flag.String("web-path", "./web/dist/home-fern-web/browser", "Path to web files.")
 	flag.Parse()
@@ -84,6 +86,10 @@ func main() {
 	// SSM
 	router.HandleFunc("/ssm{slash:/?}",
 		ssmCredentials.WithSigV4(ssmApi.Handle)).Methods("POST")
+	router.HandleFunc("/export/ssm",
+		basicProvider.WithBasicAuth(ssmApi.ExportSsm)).Methods("GET")
+	router.HandleFunc("/import/ssm",
+		basicProvider.WithBasicAuth(ssmApi.ImportSsm)).Methods("POST", "PUT")
 
 	// Route53
 	router.HandleFunc("/route53/2013-04-01/hostedzonesbyname",
@@ -125,10 +131,9 @@ func main() {
 
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir(*webPathPtr)))
 
-	addr := ":9080"
-	log.Printf("Listening on %s", addr)
+	log.Printf("Listening on %s", *listenAddrPtr)
 	http.Handle("/", router)
-	http.ListenAndServe(addr, nil)
+	http.ListenAndServe(*listenAddrPtr, nil)
 }
 
 func readAuthCredsOrDie(configFileName string) *core.FernConfig {
@@ -142,6 +147,26 @@ func readAuthCredsOrDie(configFileName string) *core.FernConfig {
 	err = yaml.Unmarshal(configFile, &fernConfig)
 	if err != nil {
 		log.Panicln("Error unmarshalling config:", err)
+	}
+
+	if fernConfig.Region == "" {
+		log.Panicln("Region is required in config file")
+	}
+
+	if len(fernConfig.Credentials) == 0 {
+		log.Panicln("At least one credential is required in config file")
+	}
+
+	if len(fernConfig.Keys) == 0 {
+		log.Panicln("At least one key is required in config file")
+	}
+
+	if fernConfig.DnsDefaults.Soa == "" {
+		log.Panicln("DNS SOA is required in config file")
+	}
+
+	if len(fernConfig.DnsDefaults.NameServers) == 0 {
+		log.Panicln("At least one DNS NameServer is required in config file")
 	}
 
 	return &fernConfig

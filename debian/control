@@ -1,0 +1,7 @@
+Package: home-fern
+Version: 0.0.1
+Section: base
+Priority: optional
+Architecture: amd64
+Maintainer: Maintainer Name <maintainer@example.com>
+Description: Home Fern Service

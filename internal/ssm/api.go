@@ -91,6 +91,59 @@ func (api *Api) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (api *Api) ExportSsm(w http.ResponseWriter, r *http.Request) {
+
+	requestUser := r.Context().Value(awslib.RequestUser)
+	if requestUser == nil {
+		awslib.WriteErrorResponseJSON(w, awslib.ErrorCodes[awslib.ErrInternalError], r.URL, api.credentials.Region)
+		return
+	}
+	creds, _ := api.credentials.FindCredentials(fmt.Sprintf("%v", requestUser))
+
+	log.Printf("Export-SSM: %s\n", creds.AccessKeyID)
+
+	parameters, err := api.service.GetAllParameters()
+	if err != core.ErrNone {
+		log.Println("Error:", err)
+		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
+		return
+	}
+
+	awslib.WriteSuccessResponseJSON(w, parameters)
+}
+
+func (api *Api) ImportSsm(w http.ResponseWriter, r *http.Request) {
+
+	requestUser := r.Context().Value(awslib.RequestUser)
+	if requestUser == nil {
+		awslib.WriteErrorResponseJSON(w, awslib.ErrorCodes[awslib.ErrInternalError], r.URL, api.credentials.Region)
+		return
+	}
+	creds, _ := api.credentials.FindCredentials(fmt.Sprintf("%v", requestUser))
+
+	log.Printf("Import-SSM: %s\n", creds.AccessKeyID)
+
+	var parameters []ParameterData
+	if err := json.NewDecoder(r.Body).Decode(&parameters); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	overwrite := false
+	if r.Method == http.MethodPut {
+		overwrite = true
+	}
+
+	failures, err := api.service.ImportParameters(&creds, parameters, overwrite)
+	if err != core.ErrNone {
+		log.Println("Error:", err)
+		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
+		return
+	}
+
+	awslib.WriteSuccessResponseJSON(w, map[string]interface{}{"failures": failures})
+}
+
 func (api *Api) getParameter(w http.ResponseWriter, r *http.Request) {
 
 	var request awsssm.GetParameterInput
