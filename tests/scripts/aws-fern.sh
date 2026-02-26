@@ -6,5 +6,7 @@ export AWS_ACCESS_KEY_ID=my-access
 export AWS_SECRET_ACCESS_KEY=really-long-key
 export AWS_PROFILE=home-fern-test
 
-aws ${@}
-
+if ! [ -z "$1" ]
+then
+  aws ${@}
+fi

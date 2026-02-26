@@ -2,15 +2,16 @@ package route53
 
 import (
 	"encoding/xml"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	aws53 "github.com/aws/aws-sdk-go-v2/service/route53"
-	awstypes "github.com/aws/aws-sdk-go-v2/service/route53/types"
-	"github.com/gorilla/mux"
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
 	"log"
 	"net/http"
 	"strconv"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	aws53 "github.com/aws/aws-sdk-go-v2/service/route53"
+	awstypes "github.com/aws/aws-sdk-go-v2/service/route53/types"
+	"github.com/gorilla/mux"
 )
 
 type Api struct {
@@ -255,18 +256,22 @@ func (api *Api) ListHostedZonesByName(w http.ResponseWriter, r *http.Request) {
 	}
 
 	awslib.WriteSuccessResponseXML(w, struct {
-		XMLName     xml.Name              `xml:"ListHostedZoneResponse"`
-		HostedZones []awstypes.HostedZone `xml:"HostedZones>HostedZone"`
-		IsTruncated bool
-		Marker      *string
-		MaxItems    *int32
-		NextMarker  *string
+		XMLName          xml.Name              `xml:"ListHostedZonesByNameResponse"`
+		HostedZones      []awstypes.HostedZone `xml:"HostedZones>HostedZone"`
+		IsTruncated      bool
+		MaxItems         *int32
+		DNSName          *string
+		HostedZoneId     *string
+		NextDNSName      *string `xml:",omitempty"`
+		NextHostedZoneId *string `xml:",omitempty"`
 	}{
-		HostedZones: response.HostedZones,
-		IsTruncated: response.IsTruncated,
-		Marker:      response.Marker,
-		MaxItems:    response.MaxItems,
-		NextMarker:  response.NextMarker,
+		HostedZones:      response.HostedZones,
+		IsTruncated:      response.IsTruncated,
+		DNSName:          response.DNSName,
+		HostedZoneId:     response.HostedZoneId,
+		MaxItems:         response.MaxItems,
+		NextDNSName:      response.NextDNSName,
+		NextHostedZoneId: response.NextHostedZoneId,
 	})
 }
 
@@ -299,9 +304,9 @@ func (api *Api) ListHostedZones(w http.ResponseWriter, r *http.Request) {
 		XMLName     xml.Name              `xml:"ListHostedZoneResponse"`
 		HostedZones []awstypes.HostedZone `xml:"HostedZones>HostedZone"`
 		IsTruncated bool
-		Marker      *string
 		MaxItems    *int32
-		NextMarker  *string
+		Marker      *string `xml:",omitempty"`
+		NextMarker  *string `xml:",omitempty"`
 	}{
 		HostedZones: response.HostedZones,
 		IsTruncated: response.IsTruncated,
@@ -319,6 +324,18 @@ func (api *Api) ListResourceRecordSets(w http.ResponseWriter, r *http.Request) {
 
 	vars := mux.Vars(r)
 	request.HostedZoneId = aws.String(vars["id"])
+
+	// Parsing the query parameters
+	query := r.URL.Query()
+	request.StartRecordName = aws.String(query.Get("name"))
+	startRecordType := query.Get("type")
+	if startRecordType != "" {
+		request.StartRecordType = awstypes.RRType(startRecordType)
+	}
+	mi, merr := strconv.Atoi(query.Get("maxitems"))
+	if merr == nil {
+		request.MaxItems = aws.Int32(int32(mi))
+	}
 
 	response, err := api.service.ListResourceRecordSets(&request)
 	if err != core.ErrNone {

@@ -1,14 +1,15 @@
 package route53
 
 import (
-	"github.com/aws/aws-sdk-go-v2/aws"
-	aws53 "github.com/aws/aws-sdk-go-v2/service/route53"
-	awstypes "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"home-fern/internal/core"
 	"io"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	aws53 "github.com/aws/aws-sdk-go-v2/service/route53"
+	awstypes "github.com/aws/aws-sdk-go-v2/service/route53/types"
 )
 
 /*
@@ -20,7 +21,7 @@ import (
 type Service struct {
 	dataStore  *dataStore
 	soaDefault string
-	nsRecords  []awstypes.ResourceRecord
+	nsRecords  []string
 }
 
 func NewService(dns *core.DnsDefaults, dataPath string) *Service {
@@ -28,15 +29,10 @@ func NewService(dns *core.DnsDefaults, dataPath string) *Service {
 	databasePath := dataPath + "/route53"
 	dataStore := newDataStore(databasePath)
 
-	nsRecords := make([]awstypes.ResourceRecord, 0)
-	for _, ns := range dns.NameServers {
-		nsRecords = append(nsRecords, awstypes.ResourceRecord{Value: aws.String(ns)})
-	}
-
 	result := Service{
 		dataStore:  dataStore,
 		soaDefault: dns.Soa,
-		nsRecords:  nsRecords,
+		nsRecords:  dns.NameServers,
 	}
 
 	return &result
@@ -49,7 +45,8 @@ func (s *Service) Close() {
 	}
 }
 
-func (s *Service) ChangeResourceRecordSets(request *ChangeResourceRecordSetsRequest) (*aws53.ChangeResourceRecordSetsOutput, core.ErrorCode) {
+func (s *Service) ChangeResourceRecordSets(
+	request *ChangeResourceRecordSetsRequest) (*aws53.ChangeResourceRecordSetsOutput, core.ErrorCode) {
 
 	hz, err := s.dataStore.getHostedZone(request.HostedZoneId)
 	if err != core.ErrNone {
@@ -76,7 +73,8 @@ func (s *Service) ChangeResourceRecordSets(request *ChangeResourceRecordSetsRequ
 	return &result, core.ErrNone
 }
 
-func (s *Service) ChangeTagsForResource(request *aws53.ChangeTagsForResourceInput) (*aws53.ChangeTagsForResourceOutput, core.ErrorCode) {
+func (s *Service) ChangeTagsForResource(
+	request *aws53.ChangeTagsForResourceInput) (*aws53.ChangeTagsForResourceOutput, core.ErrorCode) {
 
 	if request.ResourceType != awstypes.TagResourceTypeHostedzone {
 
@@ -133,7 +131,7 @@ func (s *Service) CreateHostedZone(
 		Name:            strings.ToLower(aws.ToString(zone.Name)),
 		DelegationSet: DelegationSetData{
 			Id:          aws.ToString(zone.DelegationSetId),
-			NameServers: strings.Split(NameServers, ","),
+			NameServers: s.nsRecords,
 		},
 	}
 
@@ -144,6 +142,11 @@ func (s *Service) CreateHostedZone(
 
 	if !strings.HasSuffix(hz.Name, ".") {
 		hz.Name = hz.Name + "."
+	}
+
+	nsResourceRecords := make([]awstypes.ResourceRecord, 0, len(s.nsRecords))
+	for _, ns := range s.nsRecords {
+		nsResourceRecords = append(nsResourceRecords, awstypes.ResourceRecord{Value: aws.String(ns)})
 	}
 
 	changes := []ChangeData{{
@@ -159,7 +162,7 @@ func (s *Service) CreateHostedZone(
 		ResourceRecordSet: &ResourceRecordSetData{
 			Name:            hz.Name,
 			Type:            awstypes.RRTypeNs,
-			ResourceRecords: s.nsRecords,
+			ResourceRecords: nsResourceRecords,
 		},
 	}}
 
@@ -180,6 +183,37 @@ func (s *Service) CreateHostedZone(
 
 func (s *Service) DeleteHostedZone(
 	zone *aws53.DeleteHostedZoneInput) (*aws53.DeleteHostedZoneOutput, core.ErrorCode) {
+
+	hz, herr := s.dataStore.getHostedZone(aws.ToString(zone.Id))
+	if herr != core.ErrNone {
+
+		return nil, herr
+	}
+
+	count, cerr := s.dataStore.getRecordCount(hz.Id)
+	if cerr != core.ErrNone {
+		return nil, cerr
+	}
+
+	if count > 2 {
+
+		return nil, ErrHostedZoneNotEmpty
+
+	} else if count > 0 {
+
+		recs, rerr := s.dataStore.getResourceRecordSets(hz.Id)
+		if rerr != core.ErrNone {
+			return nil, rerr
+		}
+
+		for _, rec := range recs {
+
+			if rec.Type != awstypes.RRTypeNs && rec.Type != awstypes.RRTypeSoa {
+
+				return nil, ErrHostedZoneNotEmpty
+			}
+		}
+	}
 
 	ci := ChangeInfoData{
 		Id:          core.GenerateRandomString(14),
@@ -221,13 +255,13 @@ func (s *Service) GetHostedZone(
 		return nil, err
 	}
 
-	count, cerr := s.dataStore.getRecordCount(hz.Id)
+	awshz, cerr := s.populateRecordCount(hz)
 	if cerr != core.ErrNone {
 		return nil, cerr
 	}
 
 	result := &aws53.GetHostedZoneOutput{
-		HostedZone:    hz.toHostedZone(count),
+		HostedZone:    awshz,
 		DelegationSet: hz.DelegationSet.toDelegationSet(),
 	}
 
@@ -263,54 +297,82 @@ func (s *Service) GetChange(
 }
 
 func (s *Service) ListHostedZones(
-	_ *aws53.ListHostedZonesInput) (*aws53.ListHostedZonesOutput, core.ErrorCode) {
+	request *aws53.ListHostedZonesInput) (*aws53.ListHostedZonesOutput, core.ErrorCode) {
 
-	zones, err := s.dataStore.findHostedZones(".*")
+	zones, err := s.dataStore.findHostedZones(nil)
 	if err != core.ErrNone {
-
 		return nil, err
 	}
 
-	result := aws53.ListHostedZonesOutput{
-		HostedZones: make([]awstypes.HostedZone, 0),
-		IsTruncated: false,
+	slices.SortFunc(zones, func(a, b HostedZoneData) int {
+		return strings.Compare(a.Id, b.Id)
+	})
+
+	startIndex := s.findHostedZoneByMarker(zones, request.Marker)
+	paginatedZones, nextZone := paginate(zones[startIndex:], request.MaxItems)
+
+	awsZones, err := s.populateRecordCounts(paginatedZones)
+	if err != core.ErrNone {
+		return nil, err
 	}
 
-	for _, hz := range zones {
-		count, cerr := s.dataStore.getRecordCount(hz.Id)
-		if cerr != core.ErrNone {
-			return nil, cerr
-		}
-
-		result.HostedZones = append(result.HostedZones, *hz.toHostedZone(count))
+	var nextMarker *string
+	if nextZone != nil {
+		nextMarker = &nextZone.Id
 	}
 
-	return &result, core.ErrNone
+	return &aws53.ListHostedZonesOutput{
+		HostedZones: awsZones,
+		IsTruncated: nextZone != nil,
+		Marker:      request.Marker,
+		MaxItems:    request.MaxItems,
+		NextMarker:  nextMarker,
+	}, core.ErrNone
 }
 
 func (s *Service) ListHostedZonesByName(
 	request *aws53.ListHostedZonesByNameInput) (*aws53.ListHostedZonesByNameOutput, core.ErrorCode) {
 
-	zoneFilter := ".*"
-	if request.HostedZoneId != nil {
-		zoneFilter = aws.ToString(request.HostedZoneId)
+	if aws.ToString(request.HostedZoneId) != "" && aws.ToString(request.DNSName) == "" {
+		return nil, ErrInvalidInput
 	}
 
-	zones, err := s.dataStore.findHostedZones(zoneFilter)
+	zones, err := s.dataStore.findHostedZones(nil)
 	if err != core.ErrNone {
-
 		return nil, err
 	}
 
-	for _, hz := range zones {
-		count, cerr := s.dataStore.getRecordCount(hz.Id)
-		if cerr != core.ErrNone {
-			return nil, cerr
+	slices.SortFunc(zones, func(a, b HostedZoneData) int {
+		n := strings.Compare(a.Name, b.Name)
+		if n == 0 {
+			return strings.Compare(a.Id, b.Id)
 		}
+		return n
+	})
 
-		result.HostedZones = append(result.HostedZones, *hz.toHostedZone(count))
+	startIndex := s.findHostedZoneByName(zones, request.DNSName, request.HostedZoneId)
+	paginatedZones, nextZone := paginate(zones[startIndex:], request.MaxItems)
+
+	awsZones, err := s.populateRecordCounts(paginatedZones)
+	if err != core.ErrNone {
+		return nil, err
 	}
 
+	var nextDNSName, nextHostedZoneId *string
+	if nextZone != nil {
+		nextDNSName = &nextZone.Name
+		nextHostedZoneId = &nextZone.Id
+	}
+
+	return &aws53.ListHostedZonesByNameOutput{
+		HostedZones:      awsZones,
+		IsTruncated:      nextZone != nil,
+		DNSName:          request.DNSName,
+		HostedZoneId:     request.HostedZoneId,
+		MaxItems:         request.MaxItems,
+		NextDNSName:      nextDNSName,
+		NextHostedZoneId: nextHostedZoneId,
+	}, core.ErrNone
 }
 
 func (s *Service) ListResourceRecordSets(
@@ -318,20 +380,35 @@ func (s *Service) ListResourceRecordSets(
 
 	hz, err := s.dataStore.getHostedZone(aws.ToString(request.HostedZoneId))
 	if err != core.ErrNone {
-
 		return nil, err
 	}
 
-	options := listOptions{
-		hostedZone:  hz,
-		startRecord: aws.ToString(request.StartRecordName),
-		startType:   request.StartRecordType,
-		count:       int(aws.ToInt32(request.MaxItems)),
+	records, err := s.dataStore.getResourceRecordSets(hz.Id)
+	if err != core.ErrNone {
+		return nil, err
 	}
 
-	result, err := s.dataStore.getResourceRecordSets(&options)
+	slices.SortFunc(records, func(a, b ResourceRecordSetData) int {
+		n := strings.Compare(a.Name, b.Name)
+		if n == 0 {
+			return strings.Compare(string(a.Type), string(b.Type))
+		}
+		return n
+	})
 
-	return result, core.ErrNone
+	startIndex := s.findRecordSetIndex(records, request.StartRecordName, request.StartRecordType)
+	paginatedRecords, nextRecord := paginate(records[startIndex:], request.MaxItems)
+
+	result := ListRecordSetsOutput{
+		Records: paginatedRecords,
+	}
+
+	if nextRecord != nil {
+		result.NextRecord = nextRecord.Name
+		result.NexType = nextRecord.Type
+	}
+
+	return &result, core.ErrNone
 }
 
 func (s *Service) ListTagsForResource(
@@ -400,4 +477,112 @@ func (s *Service) UpdateHostedZoneComment(
 	}
 
 	return &result, core.ErrNone
+}
+
+func (s *Service) populateRecordCounts(zones []HostedZoneData) ([]awstypes.HostedZone, core.ErrorCode) {
+
+	awsZones := make([]awstypes.HostedZone, 0, len(zones))
+	for _, hz := range zones {
+		awshz, cerr := s.populateRecordCount(&hz)
+		if cerr != core.ErrNone {
+			return nil, cerr
+		}
+		awsZones = append(awsZones, *awshz)
+	}
+
+	return awsZones, core.ErrNone
+}
+
+func (s *Service) populateRecordCount(hz *HostedZoneData) (*awstypes.HostedZone, core.ErrorCode) {
+
+	count, cerr := s.dataStore.getRecordCount(hz.Id)
+	if cerr != core.ErrNone {
+		return nil, cerr
+	}
+
+	return hz.toHostedZone(count), core.ErrNone
+}
+
+func (s *Service) findHostedZoneByMarker(zones []HostedZoneData, marker *string) int {
+	if marker == nil {
+		return 0
+	}
+
+	m := aws.ToString(marker)
+	if !strings.HasPrefix(m, HostedZonePrefix) {
+		m = HostedZonePrefix + m
+	}
+
+	for i, zone := range zones {
+		if zone.Id >= m {
+			return i
+		}
+	}
+	return len(zones)
+}
+
+func (s *Service) findHostedZoneByName(
+	zones []HostedZoneData, dnsName *string, hostedZoneId *string) int {
+	if dnsName == nil {
+		return 0
+	}
+
+	name := strings.ToLower(aws.ToString(dnsName))
+	if !strings.HasSuffix(name, ".") {
+		name += "."
+	}
+
+	id := aws.ToString(hostedZoneId)
+	if id != "" && !strings.HasPrefix(id, HostedZonePrefix) {
+		id = HostedZonePrefix + id
+	}
+
+	for i, zone := range zones {
+		if zone.Name > name {
+			return i
+		}
+		if zone.Name == name {
+			if id == "" || zone.Id >= id {
+				return i
+			}
+		}
+	}
+	return len(zones)
+}
+
+func (s *Service) findRecordSetIndex(
+	records []ResourceRecordSetData, startName *string, startType awstypes.RRType) int {
+	if startName == nil || *startName == "" {
+		return 0
+	}
+
+	name := strings.ToLower(aws.ToString(startName))
+	if !strings.HasSuffix(name, ".") {
+		name += "."
+	}
+
+	for i, rr := range records {
+		if rr.Name > name {
+			return i
+		}
+		if rr.Name == name {
+			if startType == "" || string(rr.Type) >= string(startType) {
+				return i
+			}
+		}
+	}
+	return len(records)
+}
+
+func paginate[T any](items []T, maxItems *int32) ([]T, *T) {
+	limit := 100
+	if maxItems != nil {
+		limit = int(*maxItems)
+	}
+
+	if len(items) > limit {
+		return items[:limit], &items[limit]
+	}
+
+	return items, nil
 }
