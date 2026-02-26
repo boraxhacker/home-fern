@@ -12,6 +12,7 @@ const (
 	ErrHostedZoneAlreadyExists
 	ErrNoSuchHostedZone
 	ErrInvalidChangeBatch
+	ErrHostedZoneNotEmpty
 )
 
 type errorCodeMap map[core.ErrorCode]awslib.ApiError
@@ -40,6 +41,11 @@ var ErrorCodes = errorCodeMap{
 	ErrInvalidChangeBatch: {
 		Code:           "InvalidChangeBatch",
 		Description:    "The input is not valid.",
+		HTTPStatusCode: http.StatusBadRequest,
+	},
+	ErrHostedZoneNotEmpty: {
+		Code:           "HostedZoneNotEmpty",
+		Description:    "The hosted zone contains resource records that are not SOA or NS records.",
 		HTTPStatusCode: http.StatusBadRequest,
 	},
 }

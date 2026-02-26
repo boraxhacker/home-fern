@@ -26,6 +26,8 @@ func main() {
 		flag.String("data-path", ".home-fern-data", "Path to data store folder.")
 	listenAddrPtr :=
 		flag.String("listen-addr", ":9080", "Address and port to listen on.")
+	webPathPtr :=
+		flag.String("web-path", "./web/dist/home-fern-web/browser", "Path to web files.")
 	flag.Parse()
 
 	fernConfig := readAuthCredsOrDie(*configFilePtr)
@@ -90,6 +92,8 @@ func main() {
 		basicProvider.WithBasicAuth(ssmApi.ImportSsm)).Methods("POST", "PUT")
 
 	// Route53
+	router.HandleFunc("/route53/2013-04-01/hostedzonesbyname",
+		route53Credentials.WithSigV4(route53Api.ListHostedZonesByName)).Methods("GET")
 	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset",
 		route53Credentials.WithSigV4(route53Api.ListResourceRecordSets)).Methods("GET")
 	router.HandleFunc("/route53/2013-04-01/hostedzone/{id}/rrset{slash:/?}",
@@ -124,6 +128,8 @@ func main() {
 		basicProvider.WithBasicAuth(stateApi.LockState)).Methods("LOCK")
 	router.HandleFunc("/tfstate/{project}/unlock",
 		basicProvider.WithBasicAuth(stateApi.UnlockState)).Methods("UNLOCK")
+
+	router.PathPrefix("/").Handler(http.FileServer(http.Dir(*webPathPtr)))
 
 	log.Printf("Listening on %s", *listenAddrPtr)
 	http.Handle("/", router)

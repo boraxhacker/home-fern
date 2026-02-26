@@ -1,14 +1,11 @@
 package route53
 
 import (
-	"github.com/aws/aws-sdk-go-v2/aws"
-	awstypes "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"home-fern/internal/core"
 	"time"
-)
 
-const (
-	NameServers string = "ns-1.example.com,ns-2.example.com,ns-3.example.com,ns-4.example.com"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awstypes "github.com/aws/aws-sdk-go-v2/service/route53/types"
 )
 
 type ChangeInfoData struct {

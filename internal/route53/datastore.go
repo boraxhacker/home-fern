@@ -3,14 +3,15 @@ package route53
 import (
 	"encoding/json"
 	"errors"
-	awstypes "github.com/aws/aws-sdk-go-v2/service/route53/types"
-	"github.com/dgraph-io/badger/v4"
 	"home-fern/internal/core"
 	"log"
 	"math"
 	"regexp"
 	"strings"
 	"time"
+
+	awstypes "github.com/aws/aws-sdk-go-v2/service/route53/types"
+	"github.com/dgraph-io/badger/v4"
 )
 
 const (
@@ -24,13 +25,6 @@ const (
 
 type dataStore struct {
 	db *badger.DB
-}
-
-type listOptions struct {
-	hostedZone  *HostedZoneData
-	startRecord string
-	startType   awstypes.RRType
-	count       int
 }
 
 type recordKey struct {
@@ -110,7 +104,7 @@ func (ds *dataStore) deleteHostedZone(id string, ci *ChangeInfoData) core.ErrorC
 	return core.ErrNone
 }
 
-func (ds *dataStore) findHostedZones(nameFilter string) ([]HostedZoneData, core.ErrorCode) {
+func (ds *dataStore) findHostedZones(nameFilter *regexp.Regexp) ([]HostedZoneData, core.ErrorCode) {
 
 	var result []HostedZoneData
 
@@ -137,8 +131,12 @@ func (ds *dataStore) findHostedZones(nameFilter string) ([]HostedZoneData, core.
 				return verr
 			}
 
-			match, _ := regexp.MatchString(nameFilter, hz.Name)
-			if match {
+			if nameFilter != nil {
+				match := nameFilter.Match([]byte(hz.Name))
+				if match {
+					result = append(result, hz)
+				}
+			} else {
 				result = append(result, hz)
 			}
 		}
@@ -235,27 +233,11 @@ func (ds *dataStore) getRecordCount(id string) (int, core.ErrorCode) {
 	return int(math.Max(2, float64(result))), core.ErrNone
 }
 
-func (ds *dataStore) getResourceRecordSets(options *listOptions) (*ListRecordSetsOutput, core.ErrorCode) {
+func (ds *dataStore) getResourceRecordSets(hzId string) ([]ResourceRecordSetData, core.ErrorCode) {
 
-	result := ListRecordSetsOutput{
-		Records:    make([]ResourceRecordSetData, 0),
-		NextRecord: "",
-		NexType:    "",
-	}
+	var result []ResourceRecordSetData
 
-	start := ""
-	count := 0
-
-	prefix := RecordSetPrefix + strings.TrimPrefix(options.hostedZone.Id, HostedZonePrefix) + "/"
-	if options.startRecord != "" && options.startType != "" {
-
-		header, err := convertToKey(options.hostedZone.Name, options.startRecord, options.startType)
-		if err != core.ErrNone {
-			return nil, err
-		}
-
-		start = strings.TrimSuffix(prefix, "/") + header.rrkey
-	}
+	prefix := RecordSetPrefix + strings.TrimPrefix(hzId, HostedZonePrefix) + "/"
 
 	err := ds.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
@@ -269,33 +251,18 @@ func (ds *dataStore) getResourceRecordSets(options *listOptions) (*ListRecordSet
 
 			item := it.Item()
 
-			add := start == ""
-			if !add && string(item.Key()) == start {
-				add = true
-				start = ""
+			var rr ResourceRecordSetData
+
+			verr := item.Value(func(val []byte) error {
+
+				return json.Unmarshal(val, &rr)
+			})
+
+			if verr != nil {
+				return verr
 			}
 
-			if add {
-				var rr ResourceRecordSetData
-
-				verr := item.Value(func(val []byte) error {
-
-					return json.Unmarshal(val, &rr)
-				})
-
-				if verr != nil {
-					return verr
-				}
-
-				if options.count > 0 && count == options.count {
-					result.NextRecord = rr.Name
-					result.NexType = rr.Type
-					break
-				}
-
-				result.Records = append(result.Records, rr)
-				count = count + 1
-			}
+			result = append(result, rr)
 		}
 
 		return nil
@@ -309,14 +276,19 @@ func (ds *dataStore) getResourceRecordSets(options *listOptions) (*ListRecordSet
 		return nil, translateBadgerError(err)
 	}
 
-	return &result, core.ErrNone
+	return result, core.ErrNone
 
 }
 
 func (ds *dataStore) putHostedZone(
 	hz *HostedZoneData, changes []ChangeData, ci *ChangeInfoData) core.ErrorCode {
 
-	curzones, cerr := ds.findHostedZones(strings.Replace(hz.Name, ".", "\\.", -1))
+	filter, rerr := regexp.Compile(strings.Replace(hz.Name, ".", "\\.", -1))
+	if rerr != nil {
+		return core.ErrInternalError
+	}
+
+	curzones, cerr := ds.findHostedZones(filter)
 	if cerr != core.ErrNone || len(curzones) > 0 {
 		if len(curzones) > 0 {
 			return ErrHostedZoneAlreadyExists

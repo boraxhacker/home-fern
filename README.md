@@ -81,6 +81,20 @@ data "aws_ssm_parameter" "database_password" {
    with_decryption = true
 }
 ```
+
+## Frontend
+
+The frontend is an Angular application. See `web/README.md` for more details.
+
+To build the frontend:
+
+```shell
+cd web
+ng build
+```
+
+The output will be in `web/dist/home-fern-web/browser`.
+
 ## Configuration
 
 ### home-fern-config.yaml
@@ -133,4 +147,11 @@ Usage of ./home-fern:
         Path to the home-fern config file. (default ".home-fern-config.yaml")
   -data-path string
         Path to data store folder. (default ".home-fern-data")
+  -web-path string
+        Path to web files. (default "./web/dist/home-fern-web/browser")
+```
+
+To run the server with the frontend:
+```shell
+./home-fern --web-path web/dist/home-fern-web/browser
 ```
