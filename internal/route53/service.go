@@ -479,6 +479,86 @@ func (s *Service) UpdateHostedZoneComment(
 	return &result, core.ErrNone
 }
 
+func (s *Service) ExportHostedZones() ([]HostedZoneExport, core.ErrorCode) {
+
+	zones, err := s.dataStore.findHostedZones(nil)
+	if err != core.ErrNone {
+		return nil, err
+	}
+
+	var result []HostedZoneExport
+
+	for _, zone := range zones {
+
+		records, err := s.dataStore.getResourceRecordSets(zone.Id)
+		if err != core.ErrNone {
+			return nil, err
+		}
+
+		result = append(result, HostedZoneExport{
+			HostedZone: zone,
+			RecordSets: records,
+		})
+	}
+
+	return result, core.ErrNone
+}
+
+func (s *Service) ImportHostedZones(
+	zones []HostedZoneExport, overwrite bool) ([]string, core.ErrorCode) {
+
+	var failures []string
+
+	ci := ChangeInfoData{
+		Id:          ChangeInfoPrefix + core.GenerateRandomString(14),
+		Status:      awstypes.ChangeStatusInsync,
+		SubmittedAt: time.Now().UTC().Format(time.RFC3339),
+		Comment:     "Import is complete.",
+	}
+
+	for _, zone := range zones {
+
+		var rsetChanges []ChangeData
+		for _, record := range zone.RecordSets {
+
+			// we need to create a copy of the record to avoid pointer issues
+			// in the loop
+			r := record
+			rsetChanges = append(rsetChanges, ChangeData{
+				Action:            awstypes.ChangeActionUpsert,
+				ResourceRecordSet: &r,
+			})
+		}
+
+		if overwrite {
+			// if overwrite is true, we update the hosted zone
+			// and upsert the records
+			err := s.dataStore.updateHostedZone(&zone.HostedZone)
+			if err != core.ErrNone {
+				failures = append(failures, zone.HostedZone.Name)
+				continue
+			}
+
+			err = s.dataStore.putRecordSets(&zone.HostedZone, rsetChanges, &ci)
+			if err != core.ErrNone {
+				failures = append(failures, zone.HostedZone.Name)
+				continue
+			}
+
+		} else {
+			// if overwrite is false, we try to create the hosted zone
+			// if it fails, we add it to failures
+			err := s.dataStore.putHostedZone(&zone.HostedZone, rsetChanges, &ci)
+			if err != core.ErrNone {
+				failures = append(failures, zone.HostedZone.Name)
+				continue
+			}
+		}
+	}
+
+	return failures, core.ErrNone
+}
+
 func (s *Service) populateRecordCounts(zones []HostedZoneData) ([]awstypes.HostedZone, core.ErrorCode) {
 
 	awsZones := make([]awstypes.HostedZone, 0, len(zones))

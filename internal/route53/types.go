@@ -60,7 +60,7 @@ type HostedZoneData struct {
 	DelegationSet   DelegationSetData
 	Id              string
 	Name            string
-	Tags            []core.ResourceTag
+	Tags            []core.ResourceTag `json:",omitempty"`
 }
 
 func (hz *HostedZoneData) toHostedZone(rrcount int) *awstypes.HostedZone {
@@ -83,19 +83,19 @@ func (hz *HostedZoneData) toHostedZone(rrcount int) *awstypes.HostedZone {
 type ResourceRecordSetData struct {
 	Name                    string
 	Type                    awstypes.RRType
-	AliasTarget             *awstypes.AliasTarget
-	CidrRoutingConfig       *awstypes.CidrRoutingConfig
-	Failover                awstypes.ResourceRecordSetFailover `xml:",omitempty"`
-	GeoLocation             *awstypes.GeoLocation
-	GeoProximityLocation    *awstypes.GeoProximityLocation
-	HealthCheckId           *string
-	MultiValueAnswer        *bool
-	Region                  awstypes.ResourceRecordSetRegion `xml:",omitempty"`
-	ResourceRecords         []awstypes.ResourceRecord        `xml:"ResourceRecords>ResourceRecord"`
-	SetIdentifier           *string
-	TTL                     *int64
-	TrafficPolicyInstanceId *string
-	Weight                  *int64
+	AliasTarget             *awstypes.AliasTarget              `json:",omitempty"`
+	CidrRoutingConfig       *awstypes.CidrRoutingConfig        `json:",omitempty"`
+	Failover                awstypes.ResourceRecordSetFailover `xml:",omitempty" json:",omitempty"`
+	GeoLocation             *awstypes.GeoLocation              `json:",omitempty"`
+	GeoProximityLocation    *awstypes.GeoProximityLocation     `json:",omitempty"`
+	HealthCheckId           *string                            `json:",omitempty"`
+	MultiValueAnswer        *bool                              `json:",omitempty"`
+	Region                  awstypes.ResourceRecordSetRegion   `xml:",omitempty" json:",omitempty"`
+	ResourceRecords         []awstypes.ResourceRecord          `xml:"ResourceRecords>ResourceRecord"`
+	SetIdentifier           *string                            `json:",omitempty"`
+	TTL                     *int64                             `json:",omitempty"`
+	TrafficPolicyInstanceId *string                            `json:",omitempty"`
+	Weight                  *int64                             `json:",omitempty"`
 }
 
 type ListRecordSetsOutput struct {
@@ -117,4 +117,9 @@ type ChangeBatchWrapper struct {
 type ChangeResourceRecordSetsRequest struct {
 	ChangeBatch  ChangeBatchWrapper
 	HostedZoneId string
+}
+
+type HostedZoneExport struct {
+	HostedZone HostedZoneData
+	RecordSets []ResourceRecordSetData
 }

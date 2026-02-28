@@ -19,6 +19,7 @@ deb: build
 	mkdir -p release/deb/DEBIAN
 	mkdir -p release/deb/usr/bin
 	mkdir -p release/deb/etc/systemd/system
+	mkdir -p release/deb/usr/share/doc/${BINARY_NAME}
 	mkdir -p release/deb/etc/home-fern
 
 	cp release/${BINARY_NAME}-amd64 release/deb/usr/bin/${BINARY_NAME}
@@ -34,8 +35,8 @@ deb: build
 	chmod 755 release/deb/DEBIAN/postrm
 
 	cp debian/home-fern.service release/deb/etc/systemd/system/
-	cp debian/home-fern-config.yaml release/deb/etc/home-fern/config.yaml
-	chmod 600 release/deb/etc/home-fern/config.yaml
+	# Copy the example config to a non-conffile location. The postinst script will handle creating the real config.
+	cp debian/home-fern-config.yaml release/deb/usr/share/doc/${BINARY_NAME}/config.yaml.example
 
 	dpkg-deb --build release/deb release/${BINARY_NAME}_${VERSION}_amd64.deb
 	rm -rf release/deb
