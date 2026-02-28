@@ -1,22 +1,63 @@
 #!/bin/sh
 set -e
 
-if ! id "home-fern" >/dev/null 2>&1; then
-    useradd --system --user-group --no-create-home --home /var/lib/home-fern home-fern
-fi
+BINARY_NAME="home-fern"
+CONFIG_DIR="/etc/${BINARY_NAME}"
+CONFIG_FILE="${CONFIG_DIR}/config.yaml"
+EXAMPLE_CONFIG="/usr/share/doc/${BINARY_NAME}/config.yaml.example"
 
-mkdir -p /var/lib/home-fern/data
-chown -R home-fern:home-fern /var/lib/home-fern
-chmod 750 /var/lib/home-fern
+case "$1" in
+    configure)
+        # Create the home-fern user and group if they don't exist
+        if ! getent group home-fern >/dev/null; then
+            groupadd --system home-fern
+        fi
+        if ! getent passwd home-fern >/dev/null; then
+            useradd --system \
+                --gid home-fern \
+                --home-dir /var/lib/home-fern \
+                --no-create-home \
+                --shell /usr/sbin/nologin \
+                home-fern
+        fi
 
-mkdir -p /etc/home-fern
-chown -R home-fern:home-fern /etc/home-fern
-chmod 750 /etc/home-fern
+        # The package should create and own this directory.
+        # This script ensures it exists just in case.
+        if [ ! -d "$CONFIG_DIR" ]; then
+            mkdir -p "$CONFIG_DIR"
+        fi
 
-# Reload systemd to recognize the new service
-if [ -d /run/systemd/system ]; then
-    systemctl daemon-reload
-    systemctl enable home-fern
-fi
+        # If config file doesn't exist, copy the example one.
+        # This happens on first install. On upgrade, the user's
+        # modified file will be left untouched.
+        if [ ! -f "$CONFIG_FILE" ]; then
+            echo "Installing default configuration file to $CONFIG_FILE"
+            cp "$EXAMPLE_CONFIG" "$CONFIG_FILE"
+            chmod 600 "$CONFIG_FILE"
+            chown -R home-fern:home-fern $CONFIG_DIR
+        fi
+
+        # systemd integration
+        if [ -d /run/systemd/system ]; then
+            systemctl --system daemon-reload >/dev/null || true
+            # The second argument is the most-recently-configured-version.
+            # If it's absent, this is a first install.
+            if [ -z "$2" ]; then
+                systemctl enable ${BINARY_NAME}.service >/dev/null || true
+                systemctl start ${BINARY_NAME}.service >/dev/null || true
+            else
+                systemctl try-restart ${BINARY_NAME}.service >/dev/null || true
+            fi
+        fi
+    ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
 
 exit 0

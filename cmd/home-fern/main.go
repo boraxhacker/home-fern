@@ -117,6 +117,11 @@ func main() {
 	router.HandleFunc("/route53/2013-04-01/tags/{resourceType}/{resourceId}",
 		route53Credentials.WithSigV4(route53Api.ChangeTagsForResource)).Methods("POST")
 
+	router.HandleFunc("/export/route53",
+		basicProvider.WithBasicAuth(route53Api.ExportRoute53)).Methods("GET")
+	router.HandleFunc("/import/route53",
+		basicProvider.WithBasicAuth(route53Api.ImportRoute53)).Methods("POST", "PUT")
+
 	// TF State
 	router.HandleFunc("/tfstate/{project}",
 		basicProvider.WithBasicAuth(stateApi.GetState)).Methods("GET")
