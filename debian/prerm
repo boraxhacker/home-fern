@@ -1,9 +1,11 @@
 #!/bin/sh
 set -e
 
-if [ -d /run/systemd/system ]; then
-    systemctl stop home-fern || true
-    systemctl disable home-fern || true
+if [ "$1" = "remove" ]; then
+    if [ -d /run/systemd/system ]; then
+        systemctl stop home-fern || true
+        systemctl disable home-fern || true
+    fi
 fi
 
 exit 0
