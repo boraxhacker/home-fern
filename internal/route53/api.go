@@ -1,9 +1,7 @@
 package route53
 
 import (
-	"encoding/json"
 	"encoding/xml"
-	"fmt"
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
 	"log"
@@ -149,59 +147,6 @@ func (api *Api) DeleteHostedZone(w http.ResponseWriter, r *http.Request) {
 	}{
 		DeleteHostedZoneOutput: response,
 	})
-}
-
-func (api *Api) ExportRoute53(w http.ResponseWriter, r *http.Request) {
-
-	requestUser := r.Context().Value(awslib.RequestUser)
-	if requestUser == nil {
-		awslib.WriteErrorResponseJSON(w, awslib.ErrorCodes[awslib.ErrInternalError], r.URL, api.credentials.Region)
-		return
-	}
-	creds, _ := api.credentials.FindCredentials(fmt.Sprintf("%v", requestUser))
-
-	log.Printf("Export-Route53: %s\n", creds.AccessKeyID)
-
-	zones, err := api.service.ExportHostedZones()
-	if err != core.ErrNone {
-		log.Println("Error:", err)
-		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
-		return
-	}
-
-	awslib.WriteSuccessResponseJSON(w, zones)
-}
-
-func (api *Api) ImportRoute53(w http.ResponseWriter, r *http.Request) {
-
-	requestUser := r.Context().Value(awslib.RequestUser)
-	if requestUser == nil {
-		awslib.WriteErrorResponseJSON(w, awslib.ErrorCodes[awslib.ErrInternalError], r.URL, api.credentials.Region)
-		return
-	}
-	creds, _ := api.credentials.FindCredentials(fmt.Sprintf("%v", requestUser))
-
-	log.Printf("Import-Route53: %s\n", creds.AccessKeyID)
-
-	var zones []HostedZoneExport
-	if err := json.NewDecoder(r.Body).Decode(&zones); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	overwrite := false
-	if r.Method == http.MethodPut {
-		overwrite = true
-	}
-
-	failures, err := api.service.ImportHostedZones(zones, overwrite)
-	if err != core.ErrNone {
-		log.Println("Error:", err)
-		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
-		return
-	}
-
-	awslib.WriteSuccessResponseJSON(w, map[string]interface{}{"failures": failures})
 }
 
 func (api *Api) GetChange(w http.ResponseWriter, r *http.Request) {

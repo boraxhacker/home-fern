@@ -398,6 +398,21 @@ func (service *Service) GetAllParameters() ([]ParameterData, core.ErrorCode) {
 	return allParams, core.ErrNone
 }
 
+func (service *Service) DeleteAllData() core.ErrorCode {
+	allParams, err := service.GetAllParameters()
+	if err != core.ErrNone {
+		return err
+	}
+
+	for _, p := range allParams {
+		err := service.dataStore.delete(string(p.Name))
+		if err != core.ErrNone {
+			return err
+		}
+	}
+	return core.ErrNone
+}
+
 func (service *Service) ImportParameters(
 	creds *aws.Credentials, parameters []ParameterData, overwrite bool) ([]string, core.ErrorCode) {
 

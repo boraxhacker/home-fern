@@ -2,16 +2,17 @@ package main
 
 import (
 	"flag"
+	"log"
+	"net/http"
+	"os"
+
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
-	"home-fern/internal/dbdump"
+	"home-fern/internal/dbfcns"
 	"home-fern/internal/kms"
 	"home-fern/internal/route53"
 	"home-fern/internal/ssm"
 	"home-fern/internal/tfstate"
-	"log"
-	"net/http"
-	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/gorilla/mux"
@@ -62,22 +63,26 @@ func main() {
 
 	route53Api := route53.NewRoute53Api(r53svc, route53Credentials)
 
-	basicProvider := core.NewBasicCredentialsProvider(fernConfig.Credentials)
+	basicProvider := core.NewBasicCredentialsProvider(fernConfig.Region, fernConfig.Credentials)
 
 	stateApi := tfstate.NewStateApi(*dataPathPtr + "/tfstate")
 
-	var dumpApi = dbdump.Api{
-		Loggers: map[string]core.DatabaseDumper{
-			"route53": r53svc,
-			"ssm":     ssmsvc,
-		},
+	var dbApi = dbfcns.Api{
+		Ssm:         ssmsvc,
+		Route53:     r53svc,
+		TfState:     stateApi,
+		Credentials: basicProvider,
 	}
 
 	router := mux.NewRouter()
 
-	// dump
-	router.HandleFunc("/keys/{service}",
-		basicProvider.WithBasicAuth(dumpApi.LogKeys)).Methods("GET")
+	// DB Functions
+	router.HandleFunc("/db/keys/{service}",
+		basicProvider.WithBasicAuth(dbApi.Keys)).Methods("GET")
+	router.HandleFunc("/db/export/{service}",
+		basicProvider.WithBasicAuth(dbApi.Export)).Methods("GET")
+	router.HandleFunc("/db/import/{service}",
+		basicProvider.WithBasicAuth(dbApi.Import)).Methods("POST", "PUT")
 
 	// KMS
 	router.HandleFunc("/kms{slash:/?}",
@@ -86,10 +91,6 @@ func main() {
 	// SSM
 	router.HandleFunc("/ssm{slash:/?}",
 		ssmCredentials.WithSigV4(ssmApi.Handle)).Methods("POST")
-	router.HandleFunc("/export/ssm",
-		basicProvider.WithBasicAuth(ssmApi.ExportSsm)).Methods("GET")
-	router.HandleFunc("/import/ssm",
-		basicProvider.WithBasicAuth(ssmApi.ImportSsm)).Methods("POST", "PUT")
 
 	// Route53
 	router.HandleFunc("/route53/2013-04-01/hostedzonesbyname",
@@ -117,11 +118,6 @@ func main() {
 	router.HandleFunc("/route53/2013-04-01/tags/{resourceType}/{resourceId}",
 		route53Credentials.WithSigV4(route53Api.ChangeTagsForResource)).Methods("POST")
 
-	router.HandleFunc("/export/route53",
-		basicProvider.WithBasicAuth(route53Api.ExportRoute53)).Methods("GET")
-	router.HandleFunc("/import/route53",
-		basicProvider.WithBasicAuth(route53Api.ImportRoute53)).Methods("POST", "PUT")
-
 	// TF State
 	router.HandleFunc("/tfstate/{project}",
 		basicProvider.WithBasicAuth(stateApi.GetState)).Methods("GET")
@@ -138,7 +134,7 @@ func main() {
 
 	log.Printf("Listening on %s", *listenAddrPtr)
 	http.Handle("/", router)
-	http.ListenAndServe(*listenAddrPtr, nil)
+	log.Fatal(http.ListenAndServe(*listenAddrPtr, nil))
 }
 
 func readAuthCredsOrDie(configFileName string) *core.FernConfig {

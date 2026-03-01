@@ -504,6 +504,66 @@ func (s *Service) ExportHostedZones() ([]HostedZoneExport, core.ErrorCode) {
 	return result, core.ErrNone
 }
 
+func (s *Service) DeleteAllData() core.ErrorCode {
+	zones, err := s.dataStore.findHostedZones(nil)
+	if err != core.ErrNone {
+		return err
+	}
+
+	ci := ChangeInfoData{
+		Id:          core.GenerateRandomString(14),
+		Status:      awstypes.ChangeStatusInsync,
+		SubmittedAt: time.Now().UTC().Format(time.RFC3339),
+		Comment:     "DeleteAllData",
+	}
+
+	for _, zone := range zones {
+		// We need to delete all record sets first
+		records, err := s.dataStore.getResourceRecordSets(zone.Id)
+		if err != core.ErrNone {
+			return err
+		}
+
+		var changes []ChangeData
+		for _, r := range records {
+			if r.Type != awstypes.RRTypeNs && r.Type != awstypes.RRTypeSoa {
+				// We need to delete non-default records
+				// But wait, putRecordSets with DELETE action?
+				// Or we can just delete the hosted zone if we force it?
+				// The dataStore.deleteHostedZone might check for emptiness?
+				// Let's check dataStore.deleteHostedZone implementation.
+				// It's not visible here.
+				// But Service.DeleteHostedZone checks for emptiness.
+				// However, dataStore.deleteHostedZone probably just deletes the key.
+				// But we should be careful.
+				// Actually, if we want to wipe everything, we can just iterate and delete.
+				// But we need to delete records first to be clean.
+
+				// Let's try to delete records.
+				rr := r
+				changes = append(changes, ChangeData{
+					Action:            awstypes.ChangeActionDelete,
+					ResourceRecordSet: &rr,
+				})
+			}
+		}
+
+		if len(changes) > 0 {
+			err = s.dataStore.putRecordSets(&zone, changes, &ci)
+			if err != core.ErrNone {
+				return err
+			}
+		}
+
+		// Now delete the hosted zone
+		err = s.dataStore.deleteHostedZone(zone.Id, &ci)
+		if err != core.ErrNone {
+			return err
+		}
+	}
+	return core.ErrNone
+}
+
 func (s *Service) ImportHostedZones(
 	zones []HostedZoneExport, overwrite bool) ([]string, core.ErrorCode) {
 

@@ -5,26 +5,35 @@ import (
 	"crypto/subtle"
 	"home-fern/internal/awslib"
 	"net/http"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
 type BasicCredentialsProvider struct {
-	credentials map[string]string
+	Region      string
+	credentials map[string]aws.Credentials
 }
 
-func NewBasicCredentialsProvider(credentials []FernCredentials) *BasicCredentialsProvider {
+func NewBasicCredentialsProvider(region string, credentials []FernCredentials) *BasicCredentialsProvider {
 
 	result := BasicCredentialsProvider{
-		credentials: make(map[string]string),
+		Region:      region,
+		credentials: make(map[string]aws.Credentials),
 	}
 
 	for _, c := range credentials {
-		result.credentials[c.AccessKey] = c.SecretKey
+		result.credentials[c.AccessKey] = aws.Credentials{
+			AccessKeyID:     c.AccessKey,
+			SecretAccessKey: c.SecretKey,
+			Source:          c.Username,
+			AccountID:       ZeroAccountId,
+		}
 	}
 
 	return &result
 }
 
-func (p *BasicCredentialsProvider) FindCredentials(accessKey string) (string, bool) {
+func (p *BasicCredentialsProvider) FindCredentials(accessKey string) (aws.Credentials, bool) {
 
 	v, ok := p.credentials[accessKey]
 
@@ -51,10 +60,10 @@ func (p *BasicCredentialsProvider) WithBasicAuth(next http.HandlerFunc) http.Han
 
 func (p *BasicCredentialsProvider) checkBasicAuth(user string, pass string) bool {
 
-	tpass, found := p.FindCredentials(user)
+	creds, found := p.FindCredentials(user)
 	if !found {
 		return false
 	}
 
-	return subtle.ConstantTimeCompare([]byte(pass), []byte(tpass)) == 1
+	return subtle.ConstantTimeCompare([]byte(pass), []byte(creds.SecretAccessKey)) == 1
 }
