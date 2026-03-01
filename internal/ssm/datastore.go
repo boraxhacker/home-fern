@@ -4,10 +4,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/dgraph-io/badger/v4"
 	"home-fern/internal/core"
 	"log"
 	"regexp"
+
+	"github.com/dgraph-io/badger/v4"
 )
 
 type dataStore struct {
@@ -47,6 +48,14 @@ func (ds *dataStore) delete(key string) core.ErrorCode {
 		return translateBadgerError(err)
 	}
 
+	return core.ErrNone
+}
+
+func (ds *dataStore) deleteAll() core.ErrorCode {
+	err := core.DeleteAll(ds.db)
+	if err != nil {
+		return translateBadgerError(err)
+	}
 	return core.ErrNone
 }
 

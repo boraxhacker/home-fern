@@ -3,6 +3,7 @@ package route53
 import (
 	"home-fern/internal/core"
 	"io"
+	"log"
 	"slices"
 	"strings"
 	"time"
@@ -504,6 +505,10 @@ func (s *Service) ExportHostedZones() ([]HostedZoneExport, core.ErrorCode) {
 	return result, core.ErrNone
 }
 
+func (s *Service) DeleteAllData() core.ErrorCode {
+	return s.dataStore.deleteAll()
+}
+
 func (s *Service) ImportHostedZones(
 	zones []HostedZoneExport, overwrite bool) ([]string, core.ErrorCode) {
 
@@ -535,12 +540,15 @@ func (s *Service) ImportHostedZones(
 			// and upsert the records
 			err := s.dataStore.updateHostedZone(&zone.HostedZone)
 			if err != core.ErrNone {
+				log.Println("Error importing zone:", err)
 				failures = append(failures, zone.HostedZone.Name)
 				continue
 			}
 
+			ci.Id = ChangeInfoPrefix + core.GenerateRandomString(14)
 			err = s.dataStore.putRecordSets(&zone.HostedZone, rsetChanges, &ci)
 			if err != core.ErrNone {
+				log.Println("Error importing records:", err)
 				failures = append(failures, zone.HostedZone.Name)
 				continue
 			}
@@ -548,6 +556,7 @@ func (s *Service) ImportHostedZones(
 		} else {
 			// if overwrite is false, we try to create the hosted zone
 			// if it fails, we add it to failures
+			ci.Id = ChangeInfoPrefix + core.GenerateRandomString(14)
 			err := s.dataStore.putHostedZone(&zone.HostedZone, rsetChanges, &ci)
 			if err != core.ErrNone {
 				failures = append(failures, zone.HostedZone.Name)

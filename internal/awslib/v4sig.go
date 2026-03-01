@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"io"
@@ -141,7 +142,7 @@ func (p *CredentialsProvider) checkV4Sig(r *http.Request) (string, ApiError) {
 		return "", ErrorCodes.toApiErr(err)
 	}
 
-	log.Printf("AccessKey: %s\n", signV4Values.Credential.accessKey)
+	// log.Printf("AccessKey: %s\n", signV4Values.Credential.accessKey)
 
 	// Extract all the signed headers along with its values.
 	extractedSignedHeaders, err := extractSignedHeaders(signV4Values.SignedHeaders, r)

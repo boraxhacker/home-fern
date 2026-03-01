@@ -1,12 +1,12 @@
 package route53
 
 import (
-	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
 	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -31,7 +31,7 @@ func NewRoute53Api(service *Service, credentials *awslib.CredentialsProvider) *A
 
 func (api *Api) ChangeResourceRecordSets(w http.ResponseWriter, r *http.Request) {
 
-	log.Println("Amazon-Target: Route53.ChangeResourceRecordSets")
+	api.logEndpoint(w, r, "Route53.ChangeResourceRecordSets")
 
 	var request ChangeResourceRecordSetsRequest
 
@@ -60,7 +60,7 @@ func (api *Api) ChangeResourceRecordSets(w http.ResponseWriter, r *http.Request)
 
 func (api *Api) ChangeTagsForResource(w http.ResponseWriter, r *http.Request) {
 
-	log.Println("Amazon-Target: Route53.ChangeTagsForResource")
+	api.logEndpoint(w, r, "Route53.ChangeTagsForResource")
 
 	type ChangeTagsWrapper struct {
 		XMLName       xml.Name       `xml:"ChangeTagsForResourceRequest"`
@@ -102,7 +102,7 @@ func (api *Api) ChangeTagsForResource(w http.ResponseWriter, r *http.Request) {
 
 func (api *Api) CreateHostedZone(w http.ResponseWriter, r *http.Request) {
 
-	log.Println("Amazon-Target: Route53.CreateHostedZone")
+	api.logEndpoint(w, r, "Route53.CreateHostedZone")
 
 	var request aws53.CreateHostedZoneInput
 	if err := xml.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -129,7 +129,7 @@ func (api *Api) DeleteHostedZone(w http.ResponseWriter, r *http.Request) {
 
 	// DELETE /2013-04-01/hostedzone/Id
 
-	log.Println("Amazon-Target: Route53.DeleteHostedZone")
+	api.logEndpoint(w, r, "Route53.DeleteHostedZone")
 
 	var request aws53.DeleteHostedZoneInput
 
@@ -151,64 +151,11 @@ func (api *Api) DeleteHostedZone(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (api *Api) ExportRoute53(w http.ResponseWriter, r *http.Request) {
-
-	requestUser := r.Context().Value(awslib.RequestUser)
-	if requestUser == nil {
-		awslib.WriteErrorResponseJSON(w, awslib.ErrorCodes[awslib.ErrInternalError], r.URL, api.credentials.Region)
-		return
-	}
-	creds, _ := api.credentials.FindCredentials(fmt.Sprintf("%v", requestUser))
-
-	log.Printf("Export-Route53: %s\n", creds.AccessKeyID)
-
-	zones, err := api.service.ExportHostedZones()
-	if err != core.ErrNone {
-		log.Println("Error:", err)
-		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
-		return
-	}
-
-	awslib.WriteSuccessResponseJSON(w, zones)
-}
-
-func (api *Api) ImportRoute53(w http.ResponseWriter, r *http.Request) {
-
-	requestUser := r.Context().Value(awslib.RequestUser)
-	if requestUser == nil {
-		awslib.WriteErrorResponseJSON(w, awslib.ErrorCodes[awslib.ErrInternalError], r.URL, api.credentials.Region)
-		return
-	}
-	creds, _ := api.credentials.FindCredentials(fmt.Sprintf("%v", requestUser))
-
-	log.Printf("Import-Route53: %s\n", creds.AccessKeyID)
-
-	var zones []HostedZoneExport
-	if err := json.NewDecoder(r.Body).Decode(&zones); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	overwrite := false
-	if r.Method == http.MethodPut {
-		overwrite = true
-	}
-
-	failures, err := api.service.ImportHostedZones(zones, overwrite)
-	if err != core.ErrNone {
-		log.Println("Error:", err)
-		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
-		return
-	}
-
-	awslib.WriteSuccessResponseJSON(w, map[string]interface{}{"failures": failures})
-}
-
 func (api *Api) GetChange(w http.ResponseWriter, r *http.Request) {
 
 	// GET /2013-04-01/change/Id
 
-	log.Println("Amazon-Target: Route53.GetChange")
+	api.logEndpoint(w, r, "Route53.GetChange")
 
 	var request aws53.GetChangeInput
 
@@ -234,7 +181,7 @@ func (api *Api) GetHostedZone(w http.ResponseWriter, r *http.Request) {
 
 	// GET /2013-04-01/hostedzone/Id
 
-	log.Println("Amazon-Target: Route53.GetHostedZone")
+	api.logEndpoint(w, r, "Route53.GetHostedZone")
 
 	var request aws53.GetHostedZoneInput
 
@@ -272,7 +219,7 @@ func (api *Api) GetHostedZoneCount(w http.ResponseWriter, r *http.Request) {
 
 	// GET /2013-04-01/hostedzonecount
 
-	log.Println("Amazon-Target: Route53.GetHostedZoneCount")
+	api.logEndpoint(w, r, "Route53.GetHostedZoneCount")
 
 	response, err := api.service.GetHostedZoneCount()
 	if err != core.ErrNone {
@@ -290,7 +237,7 @@ func (api *Api) GetHostedZoneCount(w http.ResponseWriter, r *http.Request) {
 
 func (api *Api) ListHostedZonesByName(w http.ResponseWriter, r *http.Request) {
 
-	log.Println("Amazon-Target: Route53.ListHostedZonesByName")
+	api.logEndpoint(w, r, "Route53.ListHostedZonesByName")
 
 	var request aws53.ListHostedZonesByNameInput
 
@@ -334,7 +281,7 @@ func (api *Api) ListHostedZones(w http.ResponseWriter, r *http.Request) {
 
 	// GET /2013-04-01/hostedzone?delegationsetid=DelegationSetId&hostedzonetype=HostedZoneType&marker=Marker&maxitems=MaxItems
 
-	log.Println("Amazon-Target: Route53.ListHostedZones")
+	api.logEndpoint(w, r, "Route53.ListHostedZones")
 
 	var request aws53.ListHostedZonesInput
 
@@ -373,7 +320,7 @@ func (api *Api) ListHostedZones(w http.ResponseWriter, r *http.Request) {
 
 func (api *Api) ListResourceRecordSets(w http.ResponseWriter, r *http.Request) {
 
-	log.Println("Amazon-Target: Route53.ListResourceRecordSets")
+	api.logEndpoint(w, r, "Route53.ListResourceRecordSets")
 
 	var request aws53.ListResourceRecordSetsInput
 
@@ -416,7 +363,7 @@ func (api *Api) ListResourceRecordSets(w http.ResponseWriter, r *http.Request) {
 
 func (api *Api) ListTagsForResource(w http.ResponseWriter, r *http.Request) {
 
-	log.Println("Amazon-Target: Route53.ListTagsForResource")
+	api.logEndpoint(w, r, "Route53.ListTagsForResource")
 
 	var request aws53.ListTagsForResourceInput
 
@@ -451,7 +398,7 @@ func (api *Api) ListTagsForResource(w http.ResponseWriter, r *http.Request) {
 
 func (api *Api) UpdateHostedZoneComment(w http.ResponseWriter, r *http.Request) {
 
-	log.Println("Amazon-Target: Route53.UpdateHostedZoneComment")
+	api.logEndpoint(w, r, "Route53.UpdateHostedZoneComment")
 
 	type UpdateHostedZoneCommentWrapper struct {
 		XMLName xml.Name `xml:"UpdateHostedZoneCommentRequest"`
@@ -482,4 +429,17 @@ func (api *Api) UpdateHostedZoneComment(w http.ResponseWriter, r *http.Request) 
 	}{
 		UpdateHostedZoneCommentOutput: response,
 	})
+}
+
+func (api *Api) logEndpoint(w http.ResponseWriter, r *http.Request, amztarget string) {
+
+	requestUser := r.Context().Value(awslib.RequestUser)
+	if requestUser == nil {
+		awslib.WriteErrorResponseJSON(w, awslib.ErrorCodes[awslib.ErrInternalError], r.URL, api.credentials.Region)
+		return
+	}
+	creds, _ := api.credentials.FindCredentials(fmt.Sprintf("%v", requestUser))
+	slog.Info("Route53",
+		"Amazon-Target", amztarget, "access_key", creds.AccessKeyID, "ip", r.RemoteAddr)
+
 }

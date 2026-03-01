@@ -1,11 +1,15 @@
 package tfstate
 
 import (
-	"github.com/gorilla/mux"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/gorilla/mux"
 )
 
 type StateApi struct {
@@ -152,6 +156,61 @@ func (s *StateApi) UnlockState(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (s *StateApi) ListStateFiles() ([]string, error) {
+	var files []string
+	entries, err := os.ReadDir(s.storagePath)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+			files = append(files, entry.Name())
+		}
+	}
+	return files, nil
+}
+
+func (s *StateApi) GetStateContent(filename string) ([]byte, error) {
+	return os.ReadFile(filepath.Join(s.storagePath, filename))
+}
+
+func (s *StateApi) SaveStateContent(filename string, content []byte) error {
+	return os.WriteFile(filepath.Join(s.storagePath, filename), content, 0644)
+}
+
+func (s *StateApi) DeleteAllStates() error {
+	entries, err := os.ReadDir(s.storagePath)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".json") || strings.HasSuffix(entry.Name(), ".lock")) {
+			err := os.Remove(filepath.Join(s.storagePath, entry.Name()))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *StateApi) LogKeys(writer io.Writer) error {
+	files, err := s.ListStateFiles()
+	if err != nil {
+		return err
+	}
+
+	for _, file := range files {
+		_, err := fmt.Fprintf(writer, "%s\n", file)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func readFile(filePath string, w http.ResponseWriter) error {
 
 	// Open the file for reading.
@@ -186,16 +245,4 @@ func saveFile(filePath string, r *http.Request) error {
 	}
 
 	return nil
-}
-
-type CustomWriter struct {
-	http.ResponseWriter
-}
-
-func (w CustomWriter) Write(p []byte) (n int, err error) {
-	return w.ResponseWriter.Write(p)
-}
-
-func (w CustomWriter) WriteHeader(statusCode int) {
-	// do nothing
 }

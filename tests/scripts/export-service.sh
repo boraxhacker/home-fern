@@ -10,4 +10,12 @@ USER=my-access
 PWD=really-long-key
 URL=http://localhost:9080
 
-curl --basic --user "${USER}:${PWD}" ${URL}/export/$1
+if [ "$1" == "all" ]
+then
+  curl --basic --user "${USER}:${PWD}" \
+	--output /tmp/export-all.zip \
+	${URL}/db/export/$1
+else
+  curl --basic --user "${USER}:${PWD}" \
+	 ${URL}/db/export/$1
+fi

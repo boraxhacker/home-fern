@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: home-fern-config
+type: Opaque
+stringData:
+  config.yaml: |
+    region: us-east-1
+
+    #credentials:
+    #  - accessKey: "CHANGE ME"
+    #    secretKey: "CHANGE ME really-long-key"
+    #    username: "CHANGE ME Bob.Smith"
+
+    # AES-256 uses a 32-byte (256-bit) key
+    # openssl rand -base64 32
+    #kms:
+    #  - alias: aws/ssm
+    #    id: CHANGE ME 844c1364-08b8-11f0-aeb7-33cf4b255e16
+    #    key: CHANGE ME DkVsBYNRbORxQ6vtjUCex54YdfYfxd3c5PcP/ZruwUs=
+    # add additional keys
+    #  - alias: home-fern
+    #    id:  d0c49d70-4fae-4a20-84f0-d03fb6d670cb
+    #    key: rvl7SbrNObB5MMQDUUAoInJXpyCA3QDqELyuwa2G48M=
+
+    #dns:
+    #  soa: CHANGE ME ns-1.example.com. admin.example.com. (1 3600 180 604800 1800)
+    #  nameServers:
+    #    - CHANGE ME ns-1.example.com
+    #    - CHANGE ME ns-2.example.com
+    #    - CHANGE ME ns-3.example.com
+    #    - CHANGE ME ns-4.example.com
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: home-fern-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: home-fern
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: home-fern
+  template:
+    metadata:
+      labels:
+        app: home-fern
+    spec:
+      containers:
+        - name: home-fern
+          image: home-fern:latest
+          args:
+            - "--config"
+            - "/etc/home-fern/config.yaml"
+            - "--data-path"
+            - "/var/lib/home-fern/data"
+          ports:
+            - containerPort: 9080
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/home-fern
+              readOnly: true
+            - name: data-volume
+              mountPath: /var/lib/home-fern/data
+      volumes:
+        - name: config-volume
+          secret:
+            secretName: home-fern-config
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: home-fern-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: home-fern
+spec:
+  selector:
+    app: home-fern
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 9080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: home-fern
+spec:
+  rules:
+    - host: home-fern.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: home-fern
+                port:
+                  number: 80

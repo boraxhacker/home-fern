@@ -22,4 +22,16 @@ USER=my-access
 PWD=really-long-key
 URL=http://localhost:9080
 
-curl --basic --user "${USER}:${PWD}" --request $2 ${URL}/import/$1 --data @$3
+
+if [ "$1" == "all" ]
+then
+  curl --basic --user "${USER}:${PWD}" \
+	--request POST \
+	--form file=@$3 \
+	${URL}/db/import/$1
+else
+  curl --basic --user "${USER}:${PWD}" \
+	--request $2 \
+	--data @$3 \
+	${URL}/db/import/$1 
+fi
