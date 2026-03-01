@@ -6,7 +6,6 @@ import (
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
 	"log"
-	"log/slog"
 	"net/http"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -45,8 +44,7 @@ func (api *Api) Handle(w http.ResponseWriter, r *http.Request) {
 
 	amztarget := r.Header.Get("X-Amz-Target")
 
-	slog.Info("SSM",
-		"Amazon-Target", amztarget, "access_key", creds.AccessKeyID, "ip", r.RemoteAddr)
+	core.LogEndpoint(r, amztarget, creds)
 
 	if amztarget == "AmazonSSM.DeleteParameter" {
 

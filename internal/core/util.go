@@ -1,9 +1,13 @@
 package core
 
 import (
+	"log/slog"
 	"math/rand"
+	"net/http"
 	"strings"
 	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
 func StringOrNil(s string) *string {
@@ -60,4 +64,15 @@ func FindKeyId(keys []KmsKey, keyId string) (*KmsKey, ErrorCode) {
 	}
 
 	return nil, ErrInvalidKeyId
+}
+
+func LogEndpoint(r *http.Request, amztarget string, creds aws.Credentials) {
+
+	ip := r.Header.Get("X-Forwarded-For")
+	if ip == "" {
+		ip = r.RemoteAddr
+	}
+
+	slog.Info("Endpoint Hit",
+		"Amazon-Target", amztarget, "Account", creds.AccountID, "ip", ip)
 }

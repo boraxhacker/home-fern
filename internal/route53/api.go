@@ -6,7 +6,6 @@ import (
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
 	"log"
-	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -27,6 +26,19 @@ func NewRoute53Api(service *Service, credentials *awslib.CredentialsProvider) *A
 		credentials: credentials,
 		service:     service,
 	}
+}
+
+func (api *Api) logEndpoint(w http.ResponseWriter, r *http.Request, amztarget string) {
+
+	requestUser := r.Context().Value(awslib.RequestUser)
+	if requestUser == nil {
+		awslib.WriteErrorResponseJSON(w, awslib.ErrorCodes[awslib.ErrInternalError], r.URL, api.credentials.Region)
+		return
+	}
+
+	creds, _ := api.credentials.FindCredentials(fmt.Sprintf("%v", requestUser))
+
+	core.LogEndpoint(r, amztarget, creds)
 }
 
 func (api *Api) ChangeResourceRecordSets(w http.ResponseWriter, r *http.Request) {
@@ -429,17 +441,4 @@ func (api *Api) UpdateHostedZoneComment(w http.ResponseWriter, r *http.Request) 
 	}{
 		UpdateHostedZoneCommentOutput: response,
 	})
-}
-
-func (api *Api) logEndpoint(w http.ResponseWriter, r *http.Request, amztarget string) {
-
-	requestUser := r.Context().Value(awslib.RequestUser)
-	if requestUser == nil {
-		awslib.WriteErrorResponseJSON(w, awslib.ErrorCodes[awslib.ErrInternalError], r.URL, api.credentials.Region)
-		return
-	}
-	creds, _ := api.credentials.FindCredentials(fmt.Sprintf("%v", requestUser))
-	slog.Info("Route53",
-		"Amazon-Target", amztarget, "access_key", creds.AccessKeyID, "ip", r.RemoteAddr)
-
 }
