@@ -6,6 +6,7 @@ import (
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
 	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -43,7 +44,10 @@ func (api *Api) Handle(w http.ResponseWriter, r *http.Request) {
 	creds, _ := api.credentials.FindCredentials(fmt.Sprintf("%v", requestUser))
 
 	amztarget := r.Header.Get("X-Amz-Target")
-	log.Printf("Amazon-Target: %s\n", amztarget)
+
+	slog.Info("SSM",
+		"Amazon-Target", amztarget, "access_key", creds.AccessKeyID, "ip", r.RemoteAddr)
+
 	if amztarget == "AmazonSSM.DeleteParameter" {
 
 		api.deleteParameter(w, r)

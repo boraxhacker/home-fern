@@ -54,6 +54,14 @@ func (ds *dataStore) Close() {
 	}
 }
 
+func (ds *dataStore) deleteAll() core.ErrorCode {
+	err := core.DeleteAll(ds.db)
+	if err != nil {
+		return translateBadgerError(err)
+	}
+	return core.ErrNone
+}
+
 func (ds *dataStore) deleteHostedZone(id string, ci *ChangeInfoData) core.ErrorCode {
 
 	err := ds.db.Update(func(txn *badger.Txn) error {
@@ -86,7 +94,7 @@ func (ds *dataStore) deleteHostedZone(id string, ci *ChangeInfoData) core.ErrorC
 			return jerr
 		}
 
-		entry := badger.NewEntry([]byte(ChangeInfoPrefix+ci.Id), bytes).WithTTL(time.Hour * 24 * 30)
+		entry := badger.NewEntry([]byte(ci.Id), bytes).WithTTL(time.Hour * 24 * 30)
 
 		serr := txn.SetEntry(entry)
 		if serr != nil {

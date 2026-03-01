@@ -1,0 +1,58 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: home-fern-replicator
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: replicator
+            image: curlimages/curl:latest
+            env:
+            - name: HOST_A
+              value: "http://home-fern.example.com" # Change to your source host
+            - name: HOST_B
+              value: "http://home-fern-replica.example.com" # Change to your destination host
+            - name: CREDS_A
+              valueFrom:
+                secretKeyRef:
+                  name: home-fern-replicator-creds
+                  key: host-a
+            - name: CREDS_B
+              valueFrom:
+                secretKeyRef:
+                  name: home-fern-replicator-creds
+                  key: host-b
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              # Note: Using /db/export/all based on current API implementation
+              echo "Starting replication from $HOST_A to $HOST_B"
+              
+              echo "Exporting data..."
+              curl -s -f -u "$CREDS_A" -o /tmp/backup.zip "$HOST_A/db/export/all"
+              
+              SIZE=$(du -h /tmp/backup.zip | cut -f1)
+              echo "Export complete. Size: $SIZE"
+              
+              echo "Importing data (this will wipe existing data on destination)..."
+              curl -s -f -u "$CREDS_B" -F "file=@/tmp/backup.zip" "$HOST_B/db/import/all"
+              
+              echo "Replication successful."
+          restartPolicy: OnFailure
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: home-fern-replicator-creds
+type: Opaque
+stringData:
+  # Format: username:password
+  host-a: "CHANGE_ME:CHANGE_ME"
+  host-b: "CHANGE_ME:CHANGE_ME"

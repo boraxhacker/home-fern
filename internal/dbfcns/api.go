@@ -279,17 +279,22 @@ func (api *Api) importAll(w http.ResponseWriter, r *http.Request) {
 	// Delete TFState
 	if err := api.TfState.DeleteAllStates(); err != nil {
 		log.Println("Error deleting TFState:", err)
-		// Continue or abort? Assuming continue but log error
+		http.Error(w, "Error deleting TFState data", http.StatusInternalServerError)
+		return
 	}
 
 	// Wipe SSM
 	if err := api.Ssm.DeleteAllData(); err != core.ErrNone {
 		log.Println("Error deleting SSM data:", err)
+		http.Error(w, "Error deleting SSM data", http.StatusInternalServerError)
+		return
 	}
 
 	// Wipe Route53
 	if err := api.Route53.DeleteAllData(); err != core.ErrNone {
 		log.Println("Error deleting Route53 data:", err)
+		http.Error(w, "Error deleting Route53 data", http.StatusInternalServerError)
+		return
 	}
 
 	var ssmFailures []string
@@ -299,13 +304,16 @@ func (api *Api) importAll(w http.ResponseWriter, r *http.Request) {
 		rc, err := f.Open()
 		if err != nil {
 			log.Println("Error opening file in zip:", f.Name, err)
-			continue
+			http.Error(w, "Error opening file in zip", http.StatusInternalServerError)
+			return
 		}
 
 		if f.Name == "ssm.json" {
 			var params []ssm.ParameterData
 			if err := json.NewDecoder(rc).Decode(&params); err != nil {
 				log.Println("Error decoding ssm.json:", err)
+				http.Error(w, "Error decoding ssm.json", http.StatusInternalServerError)
+				return
 			} else {
 				failures, err := api.Ssm.ImportParameters(&creds, params, true)
 				if err != core.ErrNone {
@@ -317,6 +325,8 @@ func (api *Api) importAll(w http.ResponseWriter, r *http.Request) {
 			var zones []route53.HostedZoneExport
 			if err := json.NewDecoder(rc).Decode(&zones); err != nil {
 				log.Println("Error decoding route53.json:", err)
+				http.Error(w, "Error decoding route53.json", http.StatusInternalServerError)
+				return
 			} else {
 				failures, err := api.Route53.ImportHostedZones(zones, true)
 				if err != core.ErrNone {
@@ -332,10 +342,12 @@ func (api *Api) importAll(w http.ResponseWriter, r *http.Request) {
 			if err == nil {
 				if err := api.TfState.SaveStateContent(filename, content); err != nil {
 					log.Println("Error saving TFState:", filename, err)
+					http.Error(w, "Error saving TFState", http.StatusInternalServerError)
+					return
 				}
 			}
+			rc.Close()
 		}
-		rc.Close()
 	}
 
 	awslib.WriteSuccessResponseJSON(w, map[string]interface{}{

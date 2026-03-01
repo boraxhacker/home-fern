@@ -3,9 +3,10 @@ package core
 import (
 	"encoding/json"
 	"errors"
-	"github.com/dgraph-io/badger/v4"
 	"io"
 	"time"
+
+	"github.com/dgraph-io/badger/v4"
 )
 
 type PutData struct {
@@ -14,6 +15,10 @@ type PutData struct {
 	Delete    bool
 	Overwrite bool
 	TTL       time.Duration
+}
+
+func DeleteAll(db *badger.DB) error {
+	return db.DropAll()
 }
 
 func DeleteKeys(db *badger.DB, keys []string) error {

@@ -399,18 +399,7 @@ func (service *Service) GetAllParameters() ([]ParameterData, core.ErrorCode) {
 }
 
 func (service *Service) DeleteAllData() core.ErrorCode {
-	allParams, err := service.GetAllParameters()
-	if err != core.ErrNone {
-		return err
-	}
-
-	for _, p := range allParams {
-		err := service.dataStore.delete(string(p.Name))
-		if err != core.ErrNone {
-			return err
-		}
-	}
-	return core.ErrNone
+	return service.dataStore.deleteAll()
 }
 
 func (service *Service) ImportParameters(
