@@ -74,5 +74,5 @@ func LogEndpoint(r *http.Request, amztarget string, creds aws.Credentials) {
 	}
 
 	slog.Info("Endpoint Hit",
-		"Amazon-Target", amztarget, "Account", creds.AccountID, "ip", ip)
+		"Amazon-Target", amztarget, "Source", creds.Source, "ip", ip)
 }

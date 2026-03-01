@@ -2,11 +2,13 @@ package kms
 
 import (
 	"encoding/json"
-	awskms "github.com/aws/aws-sdk-go-v2/service/kms"
+	"fmt"
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
 	"log"
 	"net/http"
+
+	awskms "github.com/aws/aws-sdk-go-v2/service/kms"
 )
 
 type Api struct {
@@ -32,8 +34,12 @@ func (api *Api) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	creds, _ := api.credentials.FindCredentials(fmt.Sprintf("%v", requestUser))
+
 	amztarget := r.Header.Get("X-Amz-Target")
-	log.Printf("X-Amz-Target: %s\n", amztarget)
+
+	core.LogEndpoint(r, amztarget, creds)
+
 	if amztarget == "TrentService.Encrypt" {
 
 		api.encrypt(w, r)
