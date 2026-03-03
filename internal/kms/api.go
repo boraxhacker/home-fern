@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"home-fern/internal/awslib"
-	"home-fern/internal/core"
 	"log"
 	"net/http"
 
@@ -38,7 +37,7 @@ func (api *Api) Handle(w http.ResponseWriter, r *http.Request) {
 
 	amztarget := r.Header.Get("X-Amz-Target")
 
-	core.LogEndpoint(r, amztarget, creds)
+	awslib.LogEndpoint(r, amztarget, creds)
 
 	if amztarget == "TrentService.Encrypt" {
 
@@ -59,7 +58,7 @@ func (api *Api) decrypt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.Decrypt(&request)
-	if err != core.ErrNone {
+	if err != nil {
 
 		log.Println("Error:", err)
 		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
@@ -78,7 +77,7 @@ func (api *Api) encrypt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.Encrypt(&request)
-	if err != core.ErrNone {
+	if err != nil {
 
 		log.Println("Error:", err)
 		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
@@ -86,4 +85,30 @@ func (api *Api) encrypt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	awslib.WriteSuccessResponseJSON(w, response)
+}
+
+func translateToApiError(err error) awslib.ApiError {
+
+	switch err {
+	case ErrInvalidKeyId:
+		return awslib.ApiError{
+			Code:           "InvalidKeyIdException",
+			Description:    err.Error(),
+			HTTPStatusCode: http.StatusBadRequest,
+		}
+	case ErrInvalidCiphertextException:
+		return awslib.ApiError{
+			Code:           "InvalidCiphertextException",
+			Description:    err.Error(),
+			HTTPStatusCode: http.StatusBadRequest,
+		}
+	case ErrKMSInternalException:
+		return awslib.ApiError{
+			Code:           "KMSInternalException",
+			Description:    err.Error(),
+			HTTPStatusCode: http.StatusInternalServerError,
+		}
+	default:
+		return awslib.ErrorCodes[awslib.ErrInternalError]
+	}
 }

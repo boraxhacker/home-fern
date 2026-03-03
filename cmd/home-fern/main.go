@@ -8,6 +8,7 @@ import (
 
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
+	"home-fern/internal/datastore"
 	"home-fern/internal/dbfcns"
 	"home-fern/internal/kms"
 	"home-fern/internal/route53"
@@ -34,6 +35,12 @@ func main() {
 	fernConfig := readAuthCredsOrDie(*configFilePtr)
 	simplePrintConfig(fernConfig)
 
+	ds, err := datastore.New(*dataPathPtr + "/home-fern.db")
+	if err != nil {
+		log.Panicln("Error opening datastore:", err)
+	}
+	defer ds.Close()
+
 	var credentials []aws.Credentials
 	for _, cred := range fernConfig.Credentials {
 		credentials = append(credentials, aws.Credentials{
@@ -45,19 +52,17 @@ func main() {
 	}
 	kmsCredentials := awslib.NewCredentialsProvider(awslib.ServiceKms, fernConfig.Region, credentials)
 
-	kmssvc := kms.NewService(fernConfig, core.ZeroAccountId)
+	kmssvc := kms.NewService(fernConfig.Keys, fernConfig.Region, core.ZeroAccountId)
 
 	kmsApi := kms.NewKmsApi(kmssvc, kmsCredentials)
 
 	ssmCredentials := awslib.NewCredentialsProvider(awslib.ServiceSsm, fernConfig.Region, credentials)
 
-	ssmsvc := ssm.NewService(fernConfig, core.ZeroAccountId, *dataPathPtr)
-	defer ssmsvc.Close()
+	ssmsvc := ssm.NewService(fernConfig, core.ZeroAccountId, ds)
 
 	ssmApi := ssm.NewParameterApi(ssmsvc, ssmCredentials)
 
-	r53svc := route53.NewService(&fernConfig.DnsDefaults, *dataPathPtr)
-	defer r53svc.Close()
+	r53svc := route53.NewService(&fernConfig.DnsDefaults, ds)
 
 	route53Credentials := awslib.NewCredentialsProvider(awslib.ServiceRoute53, fernConfig.Region, credentials)
 

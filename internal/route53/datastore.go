@@ -1,30 +1,29 @@
 package route53
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"home-fern/internal/core"
-	"log"
+	"home-fern/internal/datastore"
+	"io"
 	"math"
 	"regexp"
 	"strings"
-	"time"
 
 	awstypes "github.com/aws/aws-sdk-go-v2/service/route53/types"
-	"github.com/dgraph-io/badger/v4"
+	"go.etcd.io/bbolt"
 )
 
 const (
-	// /hostedzone/{id}
-	// /recordset/{id}/{name}
-
 	HostedZonePrefix = "/hostedzone/"
 	ChangeInfoPrefix = "/change/"
 	RecordSetPrefix  = "/recordset/"
 )
 
 type dataStore struct {
-	db *badger.DB
+	ds *datastore.Datastore
 }
 
 type recordKey struct {
@@ -32,280 +31,196 @@ type recordKey struct {
 	rrkey  string
 }
 
-func newDataStore(databasePath string) *dataStore {
+func newDataStore(ds *datastore.Datastore) *dataStore {
+	return &dataStore{ds: ds}
+}
 
-	opts := badger.DefaultOptions(databasePath).WithLoggingLevel(badger.ERROR)
-	db, err := badger.Open(opts)
+func (ds *dataStore) deleteAll() error {
+	err := ds.ds.DeleteBucket(datastore.Route53)
 	if err != nil {
-		log.Panicln("Error opening badger db:", err)
+		return fmt.Errorf("failed to delete bucket: %w", err)
 	}
-
-	return &dataStore{db: db}
+	return nil
 }
 
-func (ds *dataStore) Close() {
-
-	if ds.db != nil {
-		err := ds.db.Close()
-		if err != nil {
-
-			log.Println("Failed to close database.", err)
-		}
-	}
+func (ds *dataStore) logKeys(w io.Writer) error {
+	return ds.ds.LogKeys(datastore.Route53, w)
 }
 
-func (ds *dataStore) deleteAll() core.ErrorCode {
-	err := core.DeleteAll(ds.db)
-	if err != nil {
-		return translateBadgerError(err)
-	}
-	return core.ErrNone
-}
-
-func (ds *dataStore) deleteHostedZone(id string, ci *ChangeInfoData) core.ErrorCode {
-
-	err := ds.db.Update(func(txn *badger.Txn) error {
-
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false
-		opts.Prefix = []byte(RecordSetPrefix + strings.TrimPrefix(id, HostedZonePrefix) + "/")
-
-		it := txn.NewIterator(opts)
-		defer it.Close()
-
-		for it.Rewind(); it.Valid(); it.Next() {
-			rerr := txn.Delete(it.Item().Key())
-			if rerr != nil {
-				return rerr
+func (ds *dataStore) deleteHostedZone(id string, ci *ChangeInfoData) error {
+	err := ds.ds.Update(datastore.Route53, func(b *bbolt.Bucket) error {
+		prefix := []byte(RecordSetPrefix + strings.TrimPrefix(id, HostedZonePrefix) + "/")
+		c := b.Cursor()
+		for k, _ := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = c.Next() {
+			if err := b.Delete(k); err != nil {
+				return err
 			}
 		}
 
 		if !strings.HasPrefix(id, HostedZonePrefix) {
 			id = HostedZonePrefix + id
 		}
-
-		derr := txn.Delete([]byte(id))
-		if derr != nil {
-			return derr
+		if err := b.Delete([]byte(id)); err != nil {
+			return err
 		}
 
-		bytes, jerr := json.Marshal(ci)
+		// ChangeInfo is now stored in the same bucket.
+		// The original had a TTL, which we are ignoring for now.
+		jsonbytes, jerr := json.Marshal(ci)
 		if jerr != nil {
 			return jerr
 		}
-
-		entry := badger.NewEntry([]byte(ci.Id), bytes).WithTTL(time.Hour * 24 * 30)
-
-		serr := txn.SetEntry(entry)
-		if serr != nil {
-			return serr
-		}
-
-		return nil
+		return b.Put([]byte(ci.Id), jsonbytes)
 	})
 
 	if err != nil {
-
-		return translateBadgerError(err)
+		return fmt.Errorf("failed to delete hosted zone %s: %w", id, err)
 	}
-
-	return core.ErrNone
+	return nil
 }
 
-func (ds *dataStore) findHostedZones(nameFilter *regexp.Regexp) ([]HostedZoneData, core.ErrorCode) {
-
+func (ds *dataStore) findHostedZones(nameFilter *regexp.Regexp) ([]HostedZoneData, error) {
 	var result []HostedZoneData
 
-	err := ds.db.View(func(txn *badger.Txn) error {
-
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = true
-		opts.Prefix = []byte(HostedZonePrefix)
-
-		it := txn.NewIterator(opts)
-		defer it.Close()
-
-		for it.Rewind(); it.Valid(); it.Next() {
-			item := it.Item()
-
+	err := ds.ds.View(datastore.Route53, func(b *bbolt.Bucket) error {
+		c := b.Cursor()
+		prefix := []byte(HostedZonePrefix)
+		for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
 			var hz HostedZoneData
-
-			verr := item.Value(func(val []byte) error {
-
-				return json.Unmarshal(val, &hz)
-			})
-
-			if verr != nil {
-				return verr
+			if err := json.Unmarshal(v, &hz); err != nil {
+				return fmt.Errorf("failed to unmarshal hosted zone: %w", err)
 			}
 
 			if nameFilter != nil {
-				match := nameFilter.Match([]byte(hz.Name))
-				if match {
+				if nameFilter.MatchString(hz.Name) {
 					result = append(result, hz)
 				}
 			} else {
 				result = append(result, hz)
 			}
 		}
-
 		return nil
 	})
 
 	if err != nil {
-
-		return nil, translateBadgerError(err)
+		if errors.Is(err, datastore.ErrBucketNotFound) {
+			return []HostedZoneData{}, nil
+		}
+		return nil, fmt.Errorf("failed to find hosted zones: %w", err)
 	}
-
-	return result, core.ErrNone
+	return result, nil
 }
 
-func (ds *dataStore) getChange(id string) (*ChangeInfoData, core.ErrorCode) {
-
+func (ds *dataStore) getChange(id string) (*ChangeInfoData, error) {
 	var result ChangeInfoData
-
 	if !strings.HasPrefix(id, ChangeInfoPrefix) {
 		id = ChangeInfoPrefix + id
 	}
 
-	err := ds.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(id))
-		if err != nil {
-
-			return err
+	err := ds.ds.View(datastore.Route53, func(b *bbolt.Bucket) error {
+		v := b.Get([]byte(id))
+		if v == nil {
+			return core.ErrNotFound
 		}
-
-		return item.Value(func(val []byte) error {
-			return json.Unmarshal(val, &result)
-		})
+		return json.Unmarshal(v, &result)
 	})
 
 	if err != nil {
-
-		return nil, translateBadgerError(err)
+		if errors.Is(err, datastore.ErrBucketNotFound) {
+			return nil, core.ErrNotFound
+		}
+		if errors.Is(err, core.ErrNotFound) {
+			return nil, core.ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get change %s: %w", id, err)
 	}
-
-	return &result, core.ErrNone
+	return &result, nil
 }
 
-func (ds *dataStore) getHostedZone(id string) (*HostedZoneData, core.ErrorCode) {
-
+func (ds *dataStore) getHostedZone(id string) (*HostedZoneData, error) {
 	var result HostedZoneData
-
 	if !strings.HasPrefix(id, HostedZonePrefix) {
 		id = HostedZonePrefix + id
 	}
 
-	err := ds.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(id))
-		if err != nil {
-			return err
+	err := ds.ds.View(datastore.Route53, func(b *bbolt.Bucket) error {
+		v := b.Get([]byte(id))
+		if v == nil {
+			return ErrNoSuchHostedZone
 		}
-
-		return item.Value(func(val []byte) error {
-			return json.Unmarshal(val, &result)
-		})
+		return json.Unmarshal(v, &result)
 	})
 
 	if err != nil {
-		if errors.Is(err, badger.ErrKeyNotFound) {
+		if errors.Is(err, datastore.ErrBucketNotFound) {
 			return nil, ErrNoSuchHostedZone
 		}
-
-		return nil, translateBadgerError(err)
+		if errors.Is(err, ErrNoSuchHostedZone) {
+			return nil, ErrNoSuchHostedZone
+		}
+		return nil, fmt.Errorf("failed to get hosted zone %s: %w", id, err)
 	}
-
-	return &result, core.ErrNone
+	return &result, nil
 }
 
-func (ds *dataStore) getHostedZoneCount() (int, core.ErrorCode) {
-
-	result, err := core.GetPrefixCount(ds.db, HostedZonePrefix)
+func (ds *dataStore) getHostedZoneCount() (int, error) {
+	count, err := ds.ds.GetPrefixCount(datastore.Route53, HostedZonePrefix)
 	if err != nil {
-
-		return -1, translateBadgerError(err)
+		return -1, fmt.Errorf("failed to get hosted zone count: %w", err)
 	}
-
-	return result, core.ErrNone
-
+	return count, nil
 }
 
-func (ds *dataStore) getRecordCount(id string) (int, core.ErrorCode) {
-
-	result, err := core.GetPrefixCount(ds.db, RecordSetPrefix+strings.TrimPrefix(id, HostedZonePrefix)+"/")
+func (ds *dataStore) getRecordCount(id string) (int, error) {
+	prefix := RecordSetPrefix + strings.TrimPrefix(id, HostedZonePrefix) + "/"
+	count, err := ds.ds.GetPrefixCount(datastore.Route53, prefix)
 	if err != nil {
-
-		return -1, translateBadgerError(err)
+		return -1, fmt.Errorf("failed to get record count for %s: %w", id, err)
 	}
-
-	return int(math.Max(2, float64(result))), core.ErrNone
+	return int(math.Max(2, float64(count))), nil
 }
 
-func (ds *dataStore) getResourceRecordSets(hzId string) ([]ResourceRecordSetData, core.ErrorCode) {
-
+func (ds *dataStore) getResourceRecordSets(hzId string) ([]ResourceRecordSetData, error) {
 	var result []ResourceRecordSetData
-
 	prefix := RecordSetPrefix + strings.TrimPrefix(hzId, HostedZonePrefix) + "/"
 
-	err := ds.db.View(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = true
-		opts.Prefix = []byte(prefix)
-
-		it := txn.NewIterator(opts)
-		defer it.Close()
-
-		for it.Rewind(); it.Valid(); it.Next() {
-
-			item := it.Item()
-
+	err := ds.ds.View(datastore.Route53, func(b *bbolt.Bucket) error {
+		c := b.Cursor()
+		prefixBytes := []byte(prefix)
+		for k, v := c.Seek(prefixBytes); k != nil && bytes.HasPrefix(k, prefixBytes); k, v = c.Next() {
 			var rr ResourceRecordSetData
-
-			verr := item.Value(func(val []byte) error {
-
-				return json.Unmarshal(val, &rr)
-			})
-
-			if verr != nil {
-				return verr
+			if err := json.Unmarshal(v, &rr); err != nil {
+				return fmt.Errorf("failed to unmarshal record set: %w", err)
 			}
-
 			result = append(result, rr)
 		}
-
 		return nil
 	})
 
 	if err != nil {
-		if errors.Is(err, badger.ErrKeyNotFound) {
-			return nil, ErrNoSuchHostedZone
+		if errors.Is(err, datastore.ErrBucketNotFound) {
+			return []ResourceRecordSetData{}, nil
 		}
-
-		return nil, translateBadgerError(err)
+		return nil, fmt.Errorf("failed to get resource record sets for %s: %w", hzId, err)
 	}
-
-	return result, core.ErrNone
-
+	return result, nil
 }
 
-func (ds *dataStore) putHostedZone(
-	hz *HostedZoneData, changes []ChangeData, ci *ChangeInfoData) core.ErrorCode {
-
+func (ds *dataStore) putHostedZone(hz *HostedZoneData, changes []ChangeData, ci *ChangeInfoData) error {
 	filter, rerr := regexp.Compile(strings.Replace(hz.Name, ".", "\\.", -1))
 	if rerr != nil {
-		return core.ErrInternalError
+		return fmt.Errorf("failed to compile regex: %w", rerr)
 	}
 
 	curzones, cerr := ds.findHostedZones(filter)
-	if cerr != core.ErrNone || len(curzones) > 0 {
-		if len(curzones) > 0 {
-			return ErrHostedZoneAlreadyExists
-		}
-
+	if cerr != nil {
 		return cerr
 	}
+	if len(curzones) > 0 {
+		return ErrHostedZoneAlreadyExists
+	}
 
-	data := []core.PutData{{
+	data := []datastore.PutData{{
 		Key:       hz.Id,
 		Data:      hz,
 		Overwrite: false,
@@ -313,106 +228,77 @@ func (ds *dataStore) putHostedZone(
 		Key:       ci.Id,
 		Data:      ci,
 		Overwrite: false,
-		TTL:       time.Until(time.Now().Add(90 * 24 * time.Hour)),
 	}}
 
 	pddata, pderr := convertToPutData(hz, changes)
-	if pderr != core.ErrNone {
+	if pderr != nil {
 		return pderr
 	}
-
 	data = append(data, pddata...)
 
-	err := core.PutKeys(ds.db, data)
+	err := ds.ds.PutKeys(datastore.Route53, data)
 	if err != nil {
-		return translateBadgerError(err)
+		return fmt.Errorf("failed to put hosted zone: %w", err)
 	}
-
-	return core.ErrNone
+	return nil
 }
 
-func (ds *dataStore) putRecordSets(hz *HostedZoneData, changes []ChangeData, ci *ChangeInfoData) core.ErrorCode {
-
+func (ds *dataStore) putRecordSets(hz *HostedZoneData, changes []ChangeData, ci *ChangeInfoData) error {
 	data, pderr := convertToPutData(hz, changes)
-	if pderr != core.ErrNone {
+	if pderr != nil {
 		return pderr
 	}
-
-	data = append(data, core.PutData{
+	data = append(data, datastore.PutData{
 		Key:       ci.Id,
 		Data:      ci,
 		Overwrite: false,
-		TTL:       time.Until(time.Now().Add(90 * 24 * time.Hour)),
 	})
 
-	err := core.PutKeys(ds.db, data)
+	err := ds.ds.PutKeys(datastore.Route53, data)
 	if err != nil {
-		if errors.Is(err, badger.ErrRejected) {
+		if errors.Is(err, datastore.ErrKeyExists) {
 			return ErrInvalidInput
 		}
-		return translateBadgerError(err)
+		return fmt.Errorf("failed to put record sets: %w", err)
 	}
-
-	return core.ErrNone
+	return nil
 }
 
-func (ds *dataStore) updateHostedZone(hz *HostedZoneData) core.ErrorCode {
-
-	data := []core.PutData{{
+func (ds *dataStore) updateHostedZone(hz *HostedZoneData) error {
+	data := []datastore.PutData{{
 		Key:       hz.Id,
 		Data:      hz,
 		Overwrite: true,
 	}}
-
-	err := core.PutKeys(ds.db, data)
+	err := ds.ds.PutKeys(datastore.Route53, data)
 	if err != nil {
-		return translateBadgerError(err)
+		return fmt.Errorf("failed to update hosted zone: %w", err)
 	}
-
-	return core.ErrNone
+	return nil
 }
 
-func translateBadgerError(err error) core.ErrorCode {
-
-	if errors.Is(err, badger.ErrRejected) {
-		return ErrHostedZoneAlreadyExists
-	} else if errors.Is(err, badger.ErrKeyNotFound) {
-		return core.ErrNotFound
-	}
-
-	log.Println("An error occurred.", err)
-	return core.ErrInternalError
-}
-
-func convertToPutData(hz *HostedZoneData, changes []ChangeData) ([]core.PutData, core.ErrorCode) {
-
+func convertToPutData(hz *HostedZoneData, changes []ChangeData) ([]datastore.PutData, error) {
 	hzid := strings.TrimPrefix(hz.Id, HostedZonePrefix)
-
-	result := make([]core.PutData, 0)
+	result := make([]datastore.PutData, 0)
 
 	for _, change := range changes {
-
 		header, err := convertToKey(hz.Name, change.ResourceRecordSet.Name, change.ResourceRecordSet.Type)
-		if err != core.ErrNone {
-
+		if err != nil {
 			return nil, err
 		}
-
 		change.ResourceRecordSet.Name = header.rrname
 
-		result = append(result, core.PutData{
+		result = append(result, datastore.PutData{
 			Key:       RecordSetPrefix + hzid + header.rrkey,
 			Data:      change.ResourceRecordSet,
 			Delete:    change.Action == awstypes.ChangeActionDelete,
 			Overwrite: change.Action == awstypes.ChangeActionUpsert,
 		})
 	}
-
-	return result, core.ErrNone
+	return result, nil
 }
 
-func convertToKey(domainp string, rrname string, rrtype awstypes.RRType) (*recordKey, core.ErrorCode) {
-
+func convertToKey(domainp string, rrname string, rrtype awstypes.RRType) (*recordKey, error) {
 	lwrname := strings.ToLower(rrname)
 	if !strings.HasSuffix(lwrname, ".") {
 		lwrname = lwrname + "."
@@ -431,6 +317,5 @@ func convertToKey(domainp string, rrname string, rrtype awstypes.RRType) (*recor
 		rrname: lwrname,
 		rrkey:  "/" + strings.TrimSuffix(rrkey, ".") + "/" + strings.ToLower(string(rrtype)),
 	}
-
-	return &result, core.ErrNone
+	return &result, nil
 }

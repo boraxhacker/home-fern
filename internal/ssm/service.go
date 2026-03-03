@@ -3,6 +3,7 @@ package ssm
 import (
 	"fmt"
 	"home-fern/internal/core"
+	"home-fern/internal/datastore"
 	"io"
 	"slices"
 	"strings"
@@ -18,10 +19,9 @@ type Service struct {
 	region    string
 }
 
-func NewService(fernConfig *core.FernConfig, accountId string, dataPath string) *Service {
+func NewService(fernConfig *core.FernConfig, accountId string, ds *datastore.Datastore) *Service {
 
-	databasePath := dataPath + "/ssm"
-	dataStore := newDataStore(databasePath, fernConfig.Keys)
+	dataStore := newDataStore(ds, fernConfig.Keys)
 
 	result := Service{
 		region:    fernConfig.Region,
@@ -32,44 +32,37 @@ func NewService(fernConfig *core.FernConfig, accountId string, dataPath string) 
 	return &result
 }
 
-func (service *Service) Close() {
-
-	if service.dataStore != nil {
-		service.dataStore.Close()
-	}
-}
-
 func (service *Service) DeleteParameter(
-	request *awsssm.DeleteParameterInput) (*awsssm.DeleteParameterOutput, core.ErrorCode) {
+	request *awsssm.DeleteParameterInput) (*awsssm.DeleteParameterOutput, error) {
 
 	paramName, err := NewParamName(request.Name)
-	if err != core.ErrNone {
-		return nil, ErrInvalidName
-	}
-
-	err = service.dataStore.delete(string(paramName.asPathName()))
-	if err != core.ErrNone {
+	if err != nil {
 		return nil, err
 	}
 
-	return &awsssm.DeleteParameterOutput{}, core.ErrNone
+	err = service.dataStore.delete(string(paramName.asPathName()))
+	if err != nil {
+		return nil, err
+	}
+
+	return &awsssm.DeleteParameterOutput{}, nil
 }
 
 func (service *Service) DeleteParameters(
-	request *awsssm.DeleteParametersInput) (*awsssm.DeleteParametersOutput, core.ErrorCode) {
+	request *awsssm.DeleteParametersInput) (*awsssm.DeleteParametersOutput, error) {
 
 	var response awsssm.DeleteParametersOutput
 	for _, name := range request.Names {
 
 		paramName, err := NewParamName(&name)
-		if err != core.ErrNone {
+		if err != nil {
 
 			response.InvalidParameters = append(response.InvalidParameters, name)
 
 		} else {
 
 			err := service.dataStore.delete(string(paramName.asPathName()))
-			if err == core.ErrNone {
+			if err == nil {
 
 				response.DeletedParameters = append(response.DeletedParameters, name)
 
@@ -80,11 +73,11 @@ func (service *Service) DeleteParameters(
 		}
 	}
 
-	return &response, core.ErrNone
+	return &response, nil
 }
 
 func (service *Service) DescribeParameters(
-	request *awsssm.DescribeParametersInput) (*DescribeParametersResponse, core.ErrorCode) {
+	request *awsssm.DescribeParametersInput) (*DescribeParametersResponse, error) {
 
 	// TODO incomplete implementation
 
@@ -95,7 +88,7 @@ func (service *Service) DescribeParameters(
 	for _, awsfilter := range request.ParameterFilters {
 
 		filter, err := NewParameterFilter(&awsfilter)
-		if err != core.ErrNone {
+		if err != nil {
 			return nil, err
 		}
 
@@ -105,7 +98,7 @@ func (service *Service) DescribeParameters(
 			for _, value := range filter.Values {
 
 				paramName, err := NewParamName(&value)
-				if err != core.ErrNone {
+				if err != nil {
 					return nil, err
 				}
 
@@ -125,7 +118,7 @@ func (service *Service) DescribeParameters(
 			for _, value := range filter.Values {
 
 				paramPath, err := NewParamPath(&value)
-				if err != core.ErrNone {
+				if err != nil {
 					return nil, err
 				}
 
@@ -146,7 +139,7 @@ func (service *Service) DescribeParameters(
 
 	parameters, nextToken, err :=
 		service.dataStore.findParametersByKey(filters, maxResults, aws.ToString(request.NextToken))
-	if err != core.ErrNone {
+	if err != nil {
 
 		return nil, err
 	}
@@ -162,15 +155,15 @@ func (service *Service) DescribeParameters(
 			*param.toDescribeParameterItem(service.createParameterArn))
 	}
 
-	return &response, core.ErrNone
+	return &response, nil
 }
 
 func (service *Service) GetParameter(
-	request *awsssm.GetParameterInput) (*GetParameterResponse, core.ErrorCode) {
+	request *awsssm.GetParameterInput) (*GetParameterResponse, error) {
 
 	result, err := service.getParameterByName(
 		aws.ToString(request.Name), aws.ToBool(request.WithDecryption))
-	if err != core.ErrNone {
+	if err != nil {
 		return nil, err
 	}
 
@@ -178,17 +171,17 @@ func (service *Service) GetParameter(
 		Parameter: result.toGetParameterItem(service.createParameterArn),
 	}
 
-	return &response, core.ErrNone
+	return &response, nil
 }
 
 func (service *Service) GetParameters(
-	request *awsssm.GetParametersInput) (*GetParametersResponse, core.ErrorCode) {
+	request *awsssm.GetParametersInput) (*GetParametersResponse, error) {
 
 	var response GetParametersResponse
 	for _, name := range request.Names {
 
 		param, err := service.getParameterByName(name, aws.ToBool(request.WithDecryption))
-		if err == core.ErrNone {
+		if err == nil {
 			item := param.toGetParameterItem(service.createParameterArn)
 			response.Parameters = append(response.Parameters, *item)
 		} else {
@@ -196,22 +189,22 @@ func (service *Service) GetParameters(
 		}
 	}
 
-	return &response, core.ErrNone
+	return &response, nil
 }
 
 func (service *Service) GetParametersByPath(
-	request *awsssm.GetParametersByPathInput) (*GetParametersByPathResponse, core.ErrorCode) {
+	request *awsssm.GetParametersByPathInput) (*GetParametersByPathResponse, error) {
 
 	// TODO incomplete implementation
 
 	paramPath, err := NewParamPath(request.Path)
-	if err != core.ErrNone {
+	if err != nil {
 		return nil, err
 	}
 
 	for _, filter := range request.ParameterFilters {
 		_, err := NewParameterFilter(&filter)
-		if err != core.ErrNone {
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -231,7 +224,7 @@ func (service *Service) GetParametersByPath(
 
 	parameters, nextToken, err :=
 		service.dataStore.findParametersByKey(filters, maxResults, aws.ToString(request.NextToken))
-	if err != core.ErrNone {
+	if err != nil {
 
 		return nil, err
 	}
@@ -246,8 +239,8 @@ func (service *Service) GetParametersByPath(
 		if aws.ToBool(request.WithDecryption) && param.Type == awstypes.ParameterTypeSecureString {
 
 			decryptedValue, err := service.dataStore.decrypt(param.Value, param.KeyId)
-			if err != core.ErrNone {
-				return nil, ErrInvalidKeyId
+			if err != nil {
+				return nil, err
 			}
 
 			param.Value = decryptedValue
@@ -257,29 +250,28 @@ func (service *Service) GetParametersByPath(
 			*param.toGetParameterItem(service.createParameterArn))
 	}
 
-	return &response, core.ErrNone
+	return &response, nil
 }
 
 func (service *Service) PutParameter(
-	creds *aws.Credentials, request *awsssm.PutParameterInput) (*awsssm.PutParameterOutput, core.ErrorCode) {
+	creds *aws.Credentials, request *awsssm.PutParameterInput) (*awsssm.PutParameterOutput, error) {
 
 	// tags from previous version are kept and request params are ignored
 	return service.persistParameter(creds, request, false)
 }
 
 func (service *Service) LogKeys(writer io.Writer) error {
-
-	return core.LogKeys(service.dataStore.db, writer)
+	return service.dataStore.logKeys(writer)
 }
 
 func (service *Service) AddTagsToResource(
-	request *awsssm.AddTagsToResourceInput) (*awsssm.AddTagsToResourceOutput, core.ErrorCode) {
+	request *awsssm.AddTagsToResourceInput) (*awsssm.AddTagsToResourceOutput, error) {
 
 	var response awsssm.AddTagsToResourceOutput
 	if request.ResourceType == awstypes.ResourceTypeForTaggingParameter {
 
 		param, err := service.getParameterByName(aws.ToString(request.ResourceId), false)
-		if err != core.ErrNone {
+		if err != nil {
 			return nil, err
 		}
 
@@ -306,22 +298,22 @@ func (service *Service) AddTagsToResource(
 		}
 
 		_, err = service.dataStore.putParameter(string(param.Name), param, true, true)
-		if err != core.ErrNone {
+		if err != nil {
 			return nil, err
 		}
 	}
 
-	return &response, core.ErrNone
+	return &response, nil
 }
 
 func (service *Service) RemoveTagsFromResource(
-	request *awsssm.RemoveTagsFromResourceInput) (*awsssm.RemoveTagsFromResourceOutput, core.ErrorCode) {
+	request *awsssm.RemoveTagsFromResourceInput) (*awsssm.RemoveTagsFromResourceOutput, error) {
 
 	var response awsssm.RemoveTagsFromResourceOutput
 	if request.ResourceType == awstypes.ResourceTypeForTaggingParameter {
 
 		param, err := service.getParameterByName(aws.ToString(request.ResourceId), false)
-		if err != core.ErrNone {
+		if err != nil {
 			return nil, err
 		}
 
@@ -337,22 +329,22 @@ func (service *Service) RemoveTagsFromResource(
 		}
 
 		_, err = service.dataStore.putParameter(string(param.Name), param, true, true)
-		if err != core.ErrNone {
+		if err != nil {
 			return nil, err
 		}
 	}
 
-	return &response, core.ErrNone
+	return &response, nil
 }
 
 func (service *Service) ListTagsForResource(
-	request *awsssm.ListTagsForResourceInput) (*awsssm.ListTagsForResourceOutput, core.ErrorCode) {
+	request *awsssm.ListTagsForResourceInput) (*awsssm.ListTagsForResourceOutput, error) {
 
 	var response awsssm.ListTagsForResourceOutput
 	if request.ResourceType == awstypes.ResourceTypeForTaggingParameter {
 
 		param, err := service.getParameterByName(aws.ToString(request.ResourceId), false)
-		if err != core.ErrNone {
+		if err != nil {
 			return nil, err
 		}
 
@@ -363,24 +355,24 @@ func (service *Service) ListTagsForResource(
 		}
 	}
 
-	return &response, core.ErrNone
+	return &response, nil
 }
 
-func (service *Service) GetAllParameters() ([]ParameterData, core.ErrorCode) {
+func (service *Service) GetAllParameters() ([]ParameterData, error) {
 
 	var allParams []ParameterData
 	var nextToken string
 
 	for {
 		params, token, err := service.dataStore.findParametersByKey([]string{".*"}, 50, nextToken)
-		if err != core.ErrNone {
+		if err != nil {
 			return nil, err
 		}
 
 		for i := range params {
 			if params[i].Type == awstypes.ParameterTypeSecureString {
 				decryptedValue, err := service.dataStore.decrypt(params[i].Value, params[i].KeyId)
-				if err != core.ErrNone {
+				if err != nil {
 					return nil, err
 				}
 				params[i].Value = decryptedValue
@@ -395,15 +387,15 @@ func (service *Service) GetAllParameters() ([]ParameterData, core.ErrorCode) {
 		}
 	}
 
-	return allParams, core.ErrNone
+	return allParams, nil
 }
 
-func (service *Service) DeleteAllData() core.ErrorCode {
+func (service *Service) DeleteAllData() error {
 	return service.dataStore.deleteAll()
 }
 
 func (service *Service) ImportParameters(
-	creds *aws.Credentials, parameters []ParameterData, overwrite bool) ([]string, core.ErrorCode) {
+	creds *aws.Credentials, parameters []ParameterData, overwrite bool) ([]string, error) {
 
 	var failures []string
 
@@ -433,13 +425,13 @@ func (service *Service) ImportParameters(
 
 		// overwrite = true => we want our tags to persist and ignore previous version tags
 		_, err := service.persistParameter(creds, putInput, overwrite)
-		if err != core.ErrNone {
+		if err != nil {
 			failures = append(failures, string(param.Name))
 			continue
 		}
 	}
 
-	return failures, core.ErrNone
+	return failures, nil
 }
 
 func (service *Service) createUserArn(creds *aws.Credentials) string {
@@ -447,15 +439,15 @@ func (service *Service) createUserArn(creds *aws.Credentials) string {
 	return fmt.Sprintf("arn:aws:iam::%s:user/%s", service.accountId, creds.Source)
 }
 
-func (service *Service) getParameterByName(name string, withDecryption bool) (*ParameterData, core.ErrorCode) {
+func (service *Service) getParameterByName(name string, withDecryption bool) (*ParameterData, error) {
 
 	paramName, err := NewParamName(&name)
-	if err != core.ErrNone {
-		return nil, ErrInvalidName
+	if err != nil {
+		return nil, err
 	}
 
 	result, err := service.dataStore.getParameter(string(paramName.asPathName()))
-	if err != core.ErrNone {
+	if err != nil {
 		return nil, err
 	}
 
@@ -465,14 +457,14 @@ func (service *Service) getParameterByName(name string, withDecryption bool) (*P
 	if result.Type == "SecureString" && withDecryption {
 
 		decryptedValue, err := service.dataStore.decrypt(result.Value, result.KeyId)
-		if err != core.ErrNone {
+		if err != nil {
 			return nil, err
 		}
 
 		result.Value = decryptedValue
 	}
 
-	return result, core.ErrNone
+	return result, nil
 }
 
 func (service *Service) createParameterArn(name ParamName) string {
@@ -482,10 +474,10 @@ func (service *Service) createParameterArn(name ParamName) string {
 }
 
 func (service *Service) persistParameter(
-	creds *aws.Credentials, request *awsssm.PutParameterInput, skipTagCopy bool) (*awsssm.PutParameterOutput, core.ErrorCode) {
+	creds *aws.Credentials, request *awsssm.PutParameterInput, skipTagCopy bool) (*awsssm.PutParameterOutput, error) {
 
 	param, err := NewParameterData(request)
-	if err != core.ErrNone {
+	if err != nil {
 		return nil, err
 	}
 
@@ -498,7 +490,7 @@ func (service *Service) persistParameter(
 		}
 
 		encryptedValue, err := service.dataStore.encrypt(param.Value, param.KeyId)
-		if err != core.ErrNone {
+		if err != nil {
 			return nil, err
 		}
 
@@ -508,10 +500,10 @@ func (service *Service) persistParameter(
 	newVersion, err := service.dataStore.putParameter(
 		string(param.Name), param, aws.ToBool(request.Overwrite), skipTagCopy)
 
-	if err != core.ErrNone {
+	if err != nil {
 
 		return nil, err
 	}
 
-	return &awsssm.PutParameterOutput{Tier: awstypes.ParameterTierStandard, Version: newVersion}, core.ErrNone
+	return &awsssm.PutParameterOutput{Tier: awstypes.ParameterTierStandard, Version: newVersion}, nil
 }

@@ -2,6 +2,7 @@ package route53
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"home-fern/internal/awslib"
 	"home-fern/internal/core"
@@ -32,13 +33,13 @@ func (api *Api) logEndpoint(w http.ResponseWriter, r *http.Request, amztarget st
 
 	requestUser := r.Context().Value(awslib.RequestUser)
 	if requestUser == nil {
-		awslib.WriteErrorResponseJSON(w, awslib.ErrorCodes[awslib.ErrInternalError], r.URL, api.credentials.Region)
+		awslib.WriteAwsError(w, http.StatusInternalServerError, awslib.AwsErrorResponse{Code: "InternalFailure", Message: "An internal error occurred."})
 		return
 	}
 
 	creds, _ := api.credentials.FindCredentials(fmt.Sprintf("%v", requestUser))
 
-	core.LogEndpoint(r, amztarget, creds)
+	awslib.LogEndpoint(r, amztarget, creds)
 }
 
 func (api *Api) ChangeResourceRecordSets(w http.ResponseWriter, r *http.Request) {
@@ -57,8 +58,9 @@ func (api *Api) ChangeResourceRecordSets(w http.ResponseWriter, r *http.Request)
 	request.HostedZoneId = vars["id"]
 
 	response, err := api.service.ChangeResourceRecordSets(&request)
-	if err != core.ErrNone {
-		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+	if err != nil {
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -99,8 +101,9 @@ func (api *Api) ChangeTagsForResource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.ChangeTagsForResource(&request)
-	if err != core.ErrNone {
-		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+	if err != nil {
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -124,8 +127,9 @@ func (api *Api) CreateHostedZone(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.CreateHostedZone(&request)
-	if err != core.ErrNone {
-		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+	if err != nil {
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -150,8 +154,9 @@ func (api *Api) DeleteHostedZone(w http.ResponseWriter, r *http.Request) {
 	request.Id = aws.String(vars["id"])
 
 	response, err := api.service.DeleteHostedZone(&request)
-	if err != core.ErrNone {
-		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+	if err != nil {
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -176,8 +181,9 @@ func (api *Api) GetChange(w http.ResponseWriter, r *http.Request) {
 	request.Id = aws.String(vars["id"])
 
 	response, err := api.service.GetChange(&request)
-	if err != core.ErrNone {
-		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+	if err != nil {
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -202,8 +208,9 @@ func (api *Api) GetHostedZone(w http.ResponseWriter, r *http.Request) {
 	request.Id = aws.String(vars["id"])
 
 	response, err := api.service.GetHostedZone(&request)
-	if err != core.ErrNone {
-		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+	if err != nil {
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -234,8 +241,9 @@ func (api *Api) GetHostedZoneCount(w http.ResponseWriter, r *http.Request) {
 	api.logEndpoint(w, r, "Route53.GetHostedZoneCount")
 
 	response, err := api.service.GetHostedZoneCount()
-	if err != core.ErrNone {
-		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+	if err != nil {
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -264,8 +272,9 @@ func (api *Api) ListHostedZonesByName(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.ListHostedZonesByName(&request)
-	if err != core.ErrNone {
-		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+	if err != nil {
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -309,8 +318,9 @@ func (api *Api) ListHostedZones(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.ListHostedZones(&request)
-	if err != core.ErrNone {
-		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+	if err != nil {
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -352,8 +362,9 @@ func (api *Api) ListResourceRecordSets(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.ListResourceRecordSets(&request)
-	if err != core.ErrNone {
-		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+	if err != nil {
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -385,8 +396,9 @@ func (api *Api) ListTagsForResource(w http.ResponseWriter, r *http.Request) {
 	request.ResourceType = awstypes.TagResourceType(vars["resourceType"])
 
 	response, err := api.service.ListTagsForResource(&request)
-	if err != core.ErrNone {
-		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+	if err != nil {
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -430,8 +442,9 @@ func (api *Api) UpdateHostedZoneComment(w http.ResponseWriter, r *http.Request) 
 	request.Id = aws.String(vars["id"])
 
 	response, err := api.service.UpdateHostedZoneComment(&request.UpdateHostedZoneCommentInput)
-	if err != core.ErrNone {
-		awslib.WriteErrorResponseXML(w, translateToApiError(err), r.URL, api.credentials.Region)
+	if err != nil {
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -441,4 +454,27 @@ func (api *Api) UpdateHostedZoneComment(w http.ResponseWriter, r *http.Request) 
 	}{
 		UpdateHostedZoneCommentOutput: response,
 	})
+}
+
+func translateError(err error) (int, awslib.AwsErrorResponse) {
+	if errors.Is(err, ErrHostedZoneAlreadyExists) {
+		return http.StatusConflict, awslib.AwsErrorResponse{Code: "HostedZoneAlreadyExists", Message: "The hosted zone already exists."}
+	}
+	if errors.Is(err, ErrNoSuchHostedZone) {
+		return http.StatusNotFound, awslib.AwsErrorResponse{Code: "NoSuchHostedZone", Message: "The specified hosted zone does not exist."}
+	}
+	if errors.Is(err, ErrHostedZoneNotEmpty) {
+		return http.StatusBadRequest, awslib.AwsErrorResponse{Code: "HostedZoneNotEmpty", Message: "The hosted zone contains resource records that are not SOA or NS records."}
+	}
+	if errors.Is(err, ErrInvalidChangeBatch) {
+		return http.StatusBadRequest, awslib.AwsErrorResponse{Code: "InvalidChangeBatch", Message: "The change batch is invalid."}
+	}
+	if errors.Is(err, ErrInvalidInput) {
+		return http.StatusBadRequest, awslib.AwsErrorResponse{Code: "InvalidInput", Message: "The input is invalid."}
+	}
+	if errors.Is(err, core.ErrNotFound) {
+		return http.StatusNotFound, awslib.AwsErrorResponse{Code: "NoSuchChange", Message: "The specified change does not exist."}
+	}
+
+	return http.StatusInternalServerError, awslib.AwsErrorResponse{Code: "InternalFailure", Message: "An internal error occurred."}
 }
