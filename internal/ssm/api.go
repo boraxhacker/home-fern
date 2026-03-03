@@ -2,9 +2,9 @@ package ssm
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"home-fern/internal/awslib"
-	"home-fern/internal/core"
 	"log"
 	"net/http"
 
@@ -22,21 +22,11 @@ func NewParameterApi(service *Service, credentials *awslib.CredentialsProvider) 
 	return &Api{service: service, credentials: credentials}
 }
 
-/*
-o delete-parameter
-o delete-parameters
-o describe-parameters
-o get-parameter
-o get-parameters
-o get-parameters-by-path
-o put-parameter
-*/
-
 func (api *Api) Handle(w http.ResponseWriter, r *http.Request) {
 
 	requestUser := r.Context().Value(awslib.RequestUser)
 	if requestUser == nil {
-		awslib.WriteErrorResponseJSON(w, awslib.ErrorCodes[awslib.ErrInternalError], r.URL, api.credentials.Region)
+		awslib.WriteAwsError(w, http.StatusInternalServerError, awslib.AwsErrorResponse{Code: "InternalFailure", Message: "An internal error occurred."})
 		return
 	}
 
@@ -44,57 +34,35 @@ func (api *Api) Handle(w http.ResponseWriter, r *http.Request) {
 
 	amztarget := r.Header.Get("X-Amz-Target")
 
-	core.LogEndpoint(r, amztarget, creds)
+	awslib.LogEndpoint(r, amztarget, creds)
 
 	if amztarget == "AmazonSSM.DeleteParameter" {
-
 		api.deleteParameter(w, r)
-
 	} else if amztarget == "AmazonSSM.DeleteParameters" {
-
 		api.deleteParameters(w, r)
-
 	} else if amztarget == "AmazonSSM.DescribeParameters" {
-
 		api.describeParameters(w, r)
-
 	} else if amztarget == "AmazonSSM.GetParameter" {
-
 		api.getParameter(w, r)
-
 	} else if amztarget == "AmazonSSM.GetParameters" {
-
 		api.getParameters(w, r)
-
 	} else if amztarget == "AmazonSSM.GetParametersByPath" {
-
 		api.getParametersByPath(w, r)
-
 	} else if amztarget == "AmazonSSM.PutParameter" {
-
 		api.putParameter(&creds, w, r)
-
 	} else if amztarget == "AmazonSSM.ListTagsForResource" {
-
 		api.listTagsForResource(w, r)
-
 	} else if amztarget == "AmazonSSM.AddTagsToResource" {
-
 		api.addTagsToResource(w, r)
-
 	} else if amztarget == "AmazonSSM.RemoveTagsFromResource" {
-
 		api.removeTagsFromResource(w, r)
-
 	} else {
-
 		log.Println("Unknown Target:", amztarget)
-		awslib.WriteErrorResponseJSON(w, awslib.ErrorCodes[awslib.ErrValidationError], r.URL, api.credentials.Region)
+		awslib.WriteAwsError(w, http.StatusBadRequest, awslib.AwsErrorResponse{Code: "ValidationException", Message: "Unknown operation"})
 	}
 }
 
 func (api *Api) getParameter(w http.ResponseWriter, r *http.Request) {
-
 	var request awsssm.GetParameterInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -102,9 +70,10 @@ func (api *Api) getParameter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.GetParameter(&request)
-	if err != core.ErrNone {
+	if err != nil {
 		log.Println("Error:", err)
-		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -112,7 +81,6 @@ func (api *Api) getParameter(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *Api) getParameters(w http.ResponseWriter, r *http.Request) {
-
 	var request awsssm.GetParametersInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -120,10 +88,10 @@ func (api *Api) getParameters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.GetParameters(&request)
-	if err != core.ErrNone {
-
+	if err != nil {
 		log.Println("Error:", err)
-		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -131,7 +99,6 @@ func (api *Api) getParameters(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *Api) getParametersByPath(w http.ResponseWriter, r *http.Request) {
-
 	var request awsssm.GetParametersByPathInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -139,10 +106,10 @@ func (api *Api) getParametersByPath(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.GetParametersByPath(&request)
-	if err != core.ErrNone {
-
+	if err != nil {
 		log.Println("Error:", err)
-		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -150,7 +117,6 @@ func (api *Api) getParametersByPath(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *Api) describeParameters(w http.ResponseWriter, r *http.Request) {
-
 	var request awsssm.DescribeParametersInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -158,10 +124,10 @@ func (api *Api) describeParameters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.DescribeParameters(&request)
-	if err != core.ErrNone {
-
+	if err != nil {
 		log.Println("Error:", err)
-		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -169,7 +135,6 @@ func (api *Api) describeParameters(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *Api) deleteParameter(w http.ResponseWriter, r *http.Request) {
-
 	var request awsssm.DeleteParameterInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -177,10 +142,10 @@ func (api *Api) deleteParameter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.DeleteParameter(&request)
-	if err != core.ErrNone {
-
+	if err != nil {
 		log.Println("Error:", err)
-		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -188,7 +153,6 @@ func (api *Api) deleteParameter(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *Api) deleteParameters(w http.ResponseWriter, r *http.Request) {
-
 	var request awsssm.DeleteParametersInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -196,19 +160,17 @@ func (api *Api) deleteParameters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.DeleteParameters(&request)
-	if err != core.ErrNone {
-
+	if err != nil {
 		log.Println("Error:", err)
-		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
 	awslib.WriteSuccessResponseJSON(w, response)
-
 }
 
 func (api *Api) putParameter(creds *aws.Credentials, w http.ResponseWriter, r *http.Request) {
-
 	var request awsssm.PutParameterInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -216,10 +178,10 @@ func (api *Api) putParameter(creds *aws.Credentials, w http.ResponseWriter, r *h
 	}
 
 	response, err := api.service.PutParameter(creds, &request)
-	if err != core.ErrNone {
-
+	if err != nil {
 		log.Println("Error:", err)
-		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -227,7 +189,6 @@ func (api *Api) putParameter(creds *aws.Credentials, w http.ResponseWriter, r *h
 }
 
 func (api *Api) addTagsToResource(w http.ResponseWriter, r *http.Request) {
-
 	var request awsssm.AddTagsToResourceInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -235,10 +196,10 @@ func (api *Api) addTagsToResource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.AddTagsToResource(&request)
-	if err != core.ErrNone {
-
+	if err != nil {
 		log.Println("Error:", err)
-		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -246,7 +207,6 @@ func (api *Api) addTagsToResource(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *Api) removeTagsFromResource(w http.ResponseWriter, r *http.Request) {
-
 	var request awsssm.RemoveTagsFromResourceInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -254,10 +214,10 @@ func (api *Api) removeTagsFromResource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.RemoveTagsFromResource(&request)
-	if err != core.ErrNone {
-
+	if err != nil {
 		log.Println("Error:", err)
-		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
@@ -265,7 +225,6 @@ func (api *Api) removeTagsFromResource(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *Api) listTagsForResource(w http.ResponseWriter, r *http.Request) {
-
 	var request awsssm.ListTagsForResourceInput
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -273,12 +232,50 @@ func (api *Api) listTagsForResource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := api.service.ListTagsForResource(&request)
-	if err != core.ErrNone {
-
+	if err != nil {
 		log.Println("Error:", err)
-		awslib.WriteErrorResponseJSON(w, translateToApiError(err), r.URL, api.credentials.Region)
+		httpStatus, awsErr := translateError(err)
+		awslib.WriteAwsError(w, httpStatus, awsErr)
 		return
 	}
 
 	awslib.WriteSuccessResponseJSON(w, response)
+}
+
+func translateError(err error) (int, awslib.AwsErrorResponse) {
+	if errors.Is(err, ErrParameterNotFound) {
+		return http.StatusBadRequest, awslib.AwsErrorResponse{Code: "ParameterNotFound", Message: "The Parameter Name provided does not exist."}
+	}
+	if errors.Is(err, ErrParameterAlreadyExists) {
+		return http.StatusBadRequest, awslib.AwsErrorResponse{Code: "ParameterAlreadyExists", Message: "The parameter already exists. You can't create duplicate parameters."}
+	}
+	if errors.Is(err, ErrUnsupportedParameterType) {
+		return http.StatusBadRequest, awslib.AwsErrorResponse{Code: "UnsupportedParameterType", Message: "The parameter type isn't supported."}
+	}
+	if errors.Is(err, ErrInvalidKeyId) {
+		return http.StatusBadRequest, awslib.AwsErrorResponse{Code: "InvalidKeyId", Message: "The KeyId is not valid."}
+	}
+	if errors.Is(err, ErrInvalidName) {
+		return http.StatusBadRequest, awslib.AwsErrorResponse{Code: "InvalidParameterName", Message: "The Name is not valid."}
+	}
+	if errors.Is(err, ErrInvalidDataType) {
+		return http.StatusBadRequest, awslib.AwsErrorResponse{Code: "InvalidDataType", Message: "The DataType is not valid."}
+	}
+	if errors.Is(err, ErrInvalidTier) {
+		return http.StatusBadRequest, awslib.AwsErrorResponse{Code: "InvalidParameterTier", Message: "The Tier is not valid."}
+	}
+	if errors.Is(err, ErrInvalidFilterKey) {
+		return http.StatusBadRequest, awslib.AwsErrorResponse{Code: "InvalidFilterKey", Message: "The specified key isn't valid."}
+	}
+	if errors.Is(err, ErrInvalidFilterOption) {
+		return http.StatusBadRequest, awslib.AwsErrorResponse{Code: "InvalidFilterOption", Message: "The specified filter option isn't valid."}
+	}
+	if errors.Is(err, ErrInvalidFilterValue) {
+		return http.StatusBadRequest, awslib.AwsErrorResponse{Code: "InvalidFilterValue", Message: "The filter value isn't valid."}
+	}
+	if errors.Is(err, ErrInvalidPath) {
+		return http.StatusBadRequest, awslib.AwsErrorResponse{Code: "ValidationException", Message: "The parameter doesn't meet the parameter name requirements."}
+	}
+
+	return http.StatusInternalServerError, awslib.AwsErrorResponse{Code: "InternalFailure", Message: "An internal error occurred."}
 }

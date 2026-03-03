@@ -70,11 +70,11 @@ func (api *Api) Export(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if service == "all" {
-		api.exportAll(w, r)
+		api.exportAll(w)
 	} else if service == "ssm" {
-		api.exportSsm(w, r)
+		api.exportSsm(w)
 	} else if service == "route53" {
-		api.exportRoute53(w, r)
+		api.exportRoute53(w)
 	} else {
 		http.Error(w, "Unsupported service for export", http.StatusBadRequest)
 	}
@@ -99,9 +99,9 @@ func (api *Api) Import(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (api *Api) exportSsm(w http.ResponseWriter, r *http.Request) {
+func (api *Api) exportSsm(w http.ResponseWriter) {
 	parameters, err := api.Ssm.GetAllParameters()
-	if err != core.ErrNone {
+	if err != nil {
 		log.Println("Error:", err)
 		http.Error(w, "An error occurred", http.StatusInternalServerError)
 		return
@@ -109,9 +109,9 @@ func (api *Api) exportSsm(w http.ResponseWriter, r *http.Request) {
 	awslib.WriteSuccessResponseJSON(w, parameters)
 }
 
-func (api *Api) exportRoute53(w http.ResponseWriter, r *http.Request) {
+func (api *Api) exportRoute53(w http.ResponseWriter) {
 	zones, err := api.Route53.ExportHostedZones()
-	if err != core.ErrNone {
+	if err != nil {
 		log.Println("Error:", err)
 		http.Error(w, "An error occurred", http.StatusInternalServerError)
 		return
@@ -119,7 +119,7 @@ func (api *Api) exportRoute53(w http.ResponseWriter, r *http.Request) {
 	awslib.WriteSuccessResponseJSON(w, zones)
 }
 
-func (api *Api) exportAll(w http.ResponseWriter, r *http.Request) {
+func (api *Api) exportAll(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"home-fern-export.zip\"")
 
@@ -128,7 +128,7 @@ func (api *Api) exportAll(w http.ResponseWriter, r *http.Request) {
 
 	// Export SSM
 	ssmParams, err := api.Ssm.GetAllParameters()
-	if err != core.ErrNone {
+	if err != nil {
 		log.Println("Error exporting SSM:", err)
 		http.Error(w, "Error exporting SSM", http.StatusInternalServerError)
 		return
@@ -141,7 +141,7 @@ func (api *Api) exportAll(w http.ResponseWriter, r *http.Request) {
 
 	// Export Route53
 	r53Zones, err := api.Route53.ExportHostedZones()
-	if err != core.ErrNone {
+	if err != nil {
 		log.Println("Error exporting Route53:", err)
 		http.Error(w, "Error exporting Route53", http.StatusInternalServerError)
 		return
@@ -201,7 +201,7 @@ func (api *Api) importSsm(w http.ResponseWriter, r *http.Request) {
 	overwrite := r.Method == http.MethodPut
 
 	failures, err := api.Ssm.ImportParameters(&creds, parameters, overwrite)
-	if err != core.ErrNone {
+	if err != nil {
 		log.Println("Error:", err)
 		http.Error(w, "An error occurred", http.StatusInternalServerError)
 		return
@@ -220,7 +220,7 @@ func (api *Api) importRoute53(w http.ResponseWriter, r *http.Request) {
 	overwrite := r.Method == http.MethodPut
 
 	failures, err := api.Route53.ImportHostedZones(zones, overwrite)
-	if err != core.ErrNone {
+	if err != nil {
 		log.Println("Error:", err)
 		http.Error(w, "An error occurred", http.StatusInternalServerError)
 		return
@@ -284,14 +284,14 @@ func (api *Api) importAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Wipe SSM
-	if err := api.Ssm.DeleteAllData(); err != core.ErrNone {
+	if err := api.Ssm.DeleteAllData(); err != nil {
 		log.Println("Error deleting SSM data:", err)
 		http.Error(w, "Error deleting SSM data", http.StatusInternalServerError)
 		return
 	}
 
 	// Wipe Route53
-	if err := api.Route53.DeleteAllData(); err != core.ErrNone {
+	if err := api.Route53.DeleteAllData(); err != nil {
 		log.Println("Error deleting Route53 data:", err)
 		http.Error(w, "Error deleting Route53 data", http.StatusInternalServerError)
 		return
@@ -316,7 +316,7 @@ func (api *Api) importAll(w http.ResponseWriter, r *http.Request) {
 				return
 			} else {
 				failures, err := api.Ssm.ImportParameters(&creds, params, true)
-				if err != core.ErrNone {
+				if err != nil {
 					log.Println("Error importing SSM:", err)
 				}
 				ssmFailures = append(ssmFailures, failures...)
@@ -329,7 +329,7 @@ func (api *Api) importAll(w http.ResponseWriter, r *http.Request) {
 				return
 			} else {
 				failures, err := api.Route53.ImportHostedZones(zones, true)
-				if err != core.ErrNone {
+				if err != nil {
 					log.Println("Error importing Route53:", err)
 				}
 				r53Failures = append(r53Failures, failures...)

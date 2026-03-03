@@ -11,7 +11,7 @@ import (
 
 type ParamName string
 
-func NewParamName(ptrname *string) (ParamName, core.ErrorCode) {
+func NewParamName(ptrname *string) (ParamName, error) {
 
 	name := aws.ToString(ptrname)
 
@@ -23,7 +23,7 @@ func NewParamName(ptrname *string) (ParamName, core.ErrorCode) {
 		return "", ErrInvalidName
 	}
 
-	return ParamName(name), core.ErrNone
+	return ParamName(name), nil
 }
 
 func (p ParamName) asPathName() ParamName {
@@ -47,7 +47,7 @@ func (p ParamName) asEqualsRegex() string {
 
 type ParamPath string
 
-func NewParamPath(ptrpath *string) (ParamPath, core.ErrorCode) {
+func NewParamPath(ptrpath *string) (ParamPath, error) {
 
 	path := aws.ToString(ptrpath)
 
@@ -55,11 +55,11 @@ func NewParamPath(ptrpath *string) (ParamPath, core.ErrorCode) {
 
 		result := strings.TrimSuffix(path, "/")
 		_, err := NewParamName(&result)
-		if err != core.ErrNone {
+		if err != nil {
 			return "", err
 		}
 
-		return ParamPath(result), core.ErrNone
+		return ParamPath(result), nil
 	}
 
 	return "", ErrInvalidPath
@@ -95,10 +95,10 @@ type ParameterData struct {
 	Version          int64
 }
 
-func NewParameterData(request *awsssm.PutParameterInput) (*ParameterData, core.ErrorCode) {
+func NewParameterData(request *awsssm.PutParameterInput) (*ParameterData, error) {
 
 	paramName, err := NewParamName(request.Name)
-	if err != core.ErrNone {
+	if err != nil {
 		return nil, err
 	}
 
@@ -148,7 +148,7 @@ func NewParameterData(request *awsssm.PutParameterInput) (*ParameterData, core.E
 			core.ResourceTag{Key: aws.ToString(tag.Key), Value: aws.ToString(tag.Value)})
 	}
 
-	return &result, core.ErrNone
+	return &result, nil
 }
 
 type KeyFilterType string
@@ -191,7 +191,7 @@ type ParameterFilter struct {
 	Values []string         `json:"Values"`
 }
 
-func NewParameterFilter(filter *awstypes.ParameterStringFilter) (*ParameterFilter, core.ErrorCode) {
+func NewParameterFilter(filter *awstypes.ParameterStringFilter) (*ParameterFilter, error) {
 
 	result := ParameterFilter{
 		Key:    KeyFilterType(aws.ToString(filter.Key)),
@@ -219,7 +219,7 @@ func NewParameterFilter(filter *awstypes.ParameterStringFilter) (*ParameterFilte
 		}
 	}
 
-	return &result, core.ErrNone
+	return &result, nil
 }
 
 type ParameterArnGenerator func(ParamName) string

@@ -2,50 +2,49 @@ package kms
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awskms "github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"home-fern/internal/core"
 )
 
 type Service struct {
 	accountId string
 	region    string
-	keys      []core.KmsKey
+	keys      []KmsKey
 }
 
-func NewService(fernConfig *core.FernConfig, accountId string) *Service {
+func NewService(keys []KmsKey, region string, accountId string) *Service {
 
 	result := Service{
-		region:    fernConfig.Region,
+		region:    region,
 		accountId: accountId,
-		keys:      fernConfig.Keys,
+		keys:      keys,
 	}
 
 	return &result
 }
 
-func (s *Service) Encrypt(request *awskms.EncryptInput) (*awskms.EncryptOutput, core.ErrorCode) {
+func (s *Service) Encrypt(request *awskms.EncryptInput) (*awskms.EncryptOutput, error) {
 
-	key, ec := core.FindKeyId(s.keys, aws.ToString(request.KeyId))
-	if ec != core.ErrNone {
-		return nil, ec
+	key, err := FindKeyId(s.keys, aws.ToString(request.KeyId))
+	if err != nil {
+		return nil, err
 	}
 
 	var aad []byte
-	var err error
 
 	if len(request.EncryptionContext) > 0 {
 
 		aad, err = json.Marshal(request.EncryptionContext)
 		if err != nil {
-			return nil, ErrKMSInternalException
+			return nil, fmt.Errorf("failed to marshal encryption context: %w", ErrKMSInternalException)
 		}
 	}
 
 	encstr, err := key.EncryptString(string(request.Plaintext), aad)
 	if err != nil {
-		return nil, ErrKMSInternalException
+		return nil, fmt.Errorf("encryption failed: %w", ErrKMSInternalException)
 	}
 
 	result := awskms.EncryptOutput{
@@ -54,24 +53,23 @@ func (s *Service) Encrypt(request *awskms.EncryptInput) (*awskms.EncryptOutput, 
 		EncryptionAlgorithm: types.EncryptionAlgorithmSpecSymmetricDefault,
 	}
 
-	return &result, core.ErrNone
+	return &result, nil
 }
 
-func (s *Service) Decrypt(request *awskms.DecryptInput) (*awskms.DecryptOutput, core.ErrorCode) {
+func (s *Service) Decrypt(request *awskms.DecryptInput) (*awskms.DecryptOutput, error) {
 
-	key, ec := core.FindKeyId(s.keys, aws.ToString(request.KeyId))
-	if ec != core.ErrNone {
-		return nil, ec
+	key, err := FindKeyId(s.keys, aws.ToString(request.KeyId))
+	if err != nil {
+		return nil, err
 	}
 
 	var aad []byte
-	var err error
 
 	if request.EncryptionContext != nil && len(request.EncryptionContext) > 0 {
 
 		aad, err = json.Marshal(request.EncryptionContext)
 		if err != nil {
-			return nil, ErrKMSInternalException
+			return nil, fmt.Errorf("failed to marshal encryption context: %w", ErrKMSInternalException)
 		}
 	}
 
@@ -86,5 +84,5 @@ func (s *Service) Decrypt(request *awskms.DecryptInput) (*awskms.DecryptOutput, 
 		Plaintext:           []byte(decstr),
 	}
 
-	return &result, core.ErrNone
+	return &result, nil
 }

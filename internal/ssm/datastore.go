@@ -4,126 +4,93 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"home-fern/internal/core"
-	"log"
+	"home-fern/internal/datastore"
+	"home-fern/internal/kms"
+	"io"
 	"regexp"
 
-	"github.com/dgraph-io/badger/v4"
+	"go.etcd.io/bbolt"
 )
 
 type dataStore struct {
-	db   *badger.DB
-	keys []core.KmsKey
+	ds   *datastore.Datastore
+	keys []kms.KmsKey
 }
 
-func newDataStore(databasePath string, keys []core.KmsKey) *dataStore {
+func newDataStore(ds *datastore.Datastore, keys []kms.KmsKey) *dataStore {
+	return &dataStore{ds: ds, keys: keys}
+}
 
-	opts := badger.DefaultOptions(databasePath).WithLoggingLevel(badger.ERROR)
-	db, err := badger.Open(opts)
+func (ds *dataStore) delete(key string) error {
+	err := ds.ds.DeleteKeys(datastore.Ssm, []string{key})
 	if err != nil {
-		log.Panicln("Error opening badger db:", err)
+		return fmt.Errorf("failed to delete key %s: %w", key, err)
 	}
-
-	return &dataStore{db: db, keys: keys}
+	return nil
 }
 
-func (ds *dataStore) Close() {
-
-	if ds.db != nil {
-		err := ds.db.Close()
-		if err != nil {
-
-			log.Println("Failed to close database.", err)
-		}
-	}
-}
-
-func (ds *dataStore) delete(key string) core.ErrorCode {
-
-	keys := []string{key}
-	err := core.DeleteKeys(ds.db, keys)
-
+func (ds *dataStore) deleteAll() error {
+	err := ds.ds.DeleteBucket(datastore.Ssm)
 	if err != nil {
-
-		return translateBadgerError(err)
+		return fmt.Errorf("failed to delete bucket: %w", err)
 	}
-
-	return core.ErrNone
+	return nil
 }
 
-func (ds *dataStore) deleteAll() core.ErrorCode {
-	err := core.DeleteAll(ds.db)
-	if err != nil {
-		return translateBadgerError(err)
-	}
-	return core.ErrNone
+func (ds *dataStore) logKeys(w io.Writer) error {
+	return ds.ds.LogKeys(datastore.Ssm, w)
 }
 
 func (ds *dataStore) findParametersByKey(
-	filters []string, maxResults int, nextToken string) ([]ParameterData, string, core.ErrorCode) {
+	filters []string, maxResults int, nextToken string) ([]ParameterData, string, error) {
 
 	var result []ParameterData
-
 	count := 0
 	nextTokenResp := ""
 
-	err := ds.db.View(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false
+	err := ds.ds.View(datastore.Ssm, func(b *bbolt.Bucket) error {
+		c := b.Cursor()
 
-		it := txn.NewIterator(opts)
-		defer it.Close()
-
-		it.Rewind()
+		startKey := []byte{}
 		if nextToken != "" {
-			findme, derr := base64.StdEncoding.DecodeString(nextToken)
+			decodedToken, derr := base64.StdEncoding.DecodeString(nextToken)
 			if derr != nil {
-				return derr
+				return fmt.Errorf("invalid next token: %w", derr)
 			}
-
-			it.Seek(findme)
+			startKey = decodedToken
 		}
 
-		for ; it.Valid() && nextTokenResp == ""; it.Next() {
-
-			item := it.Item()
-			key := string(item.Key())
+		for k, v := c.Seek(startKey); k != nil; k, v = c.Next() {
+			key := string(k)
 			for _, filter := range filters {
-
 				match, _ := regexp.MatchString(filter, key)
 				if match {
-
 					if count == maxResults {
 						nextTokenResp = key
-						break
+						return nil // Stop iteration
 					}
 
 					var param ParameterData
-					umerr := item.Value(func(val []byte) error {
-						return json.Unmarshal(val, &param)
-					})
-
-					if umerr == nil {
-
-						result = append(result, param)
-						count++
-
-					} else {
-
-						return umerr
+					if err := json.Unmarshal(v, &param); err != nil {
+						return fmt.Errorf("failed to unmarshal parameter %s: %w", key, err)
 					}
 
-					break
+					result = append(result, param)
+					count++
+					break // Found a match for this key, move to next key
 				}
 			}
 		}
-
 		return nil
 	})
 
 	if err != nil {
-
-		return nil, "", translateBadgerError(err)
+		if errors.Is(err, datastore.ErrBucketNotFound) {
+			return []ParameterData{}, "", nil
+		}
+		return nil, "", fmt.Errorf("failed to find parameters: %w", err)
 	}
 
 	nextToken64 := ""
@@ -131,122 +98,101 @@ func (ds *dataStore) findParametersByKey(
 		nextToken64 = base64.StdEncoding.EncodeToString([]byte(nextTokenResp))
 	}
 
-	return result, nextToken64, core.ErrNone
+	return result, nextToken64, nil
 }
 
-func (ds *dataStore) getParameter(key string) (*ParameterData, core.ErrorCode) {
-
+func (ds *dataStore) getParameter(key string) (*ParameterData, error) {
 	var param ParameterData
 
-	err := ds.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
-		if err != nil {
-
-			return err
+	err := ds.ds.View(datastore.Ssm, func(b *bbolt.Bucket) error {
+		v := b.Get([]byte(key))
+		if v == nil {
+			return core.ErrNotFound
 		}
-
-		return item.Value(func(val []byte) error {
-			return json.Unmarshal(val, &param)
-		})
+		return json.Unmarshal(v, &param)
 	})
 
 	if err != nil {
-
-		return nil, translateBadgerError(err)
+		if errors.Is(err, datastore.ErrBucketNotFound) {
+			return nil, core.ErrNotFound
+		}
+		if errors.Is(err, core.ErrNotFound) {
+			return nil, core.ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get parameter %s: %w", key, err)
 	}
 
-	return &param, core.ErrNone
+	return &param, nil
 }
 
 func (ds *dataStore) putParameter(
-	key string, value *ParameterData, overwrite bool, skipTagCopy bool) (int64, core.ErrorCode) {
+	key string, value *ParameterData, overwrite bool, skipTagCopy bool) (int64, error) {
 
 	var newVersion int64 = 1
 
-	err := ds.db.Update(func(txn *badger.Txn) error {
+	err := ds.ds.Update(datastore.Ssm, func(b *bbolt.Bucket) error {
+		existingBytes := b.Get([]byte(key))
 
-		item, err := txn.Get([]byte(key))
-
-		if err == nil {
-
+		if existingBytes != nil {
 			var existingParam ParameterData
-			if err := item.Value(func(val []byte) error {
-				return json.Unmarshal(val, &existingParam)
-			}); err != nil {
-				return err
+			if err := json.Unmarshal(existingBytes, &existingParam); err != nil {
+				return fmt.Errorf("failed to unmarshal existing parameter %s: %w", key, err)
 			}
 
 			if !overwrite {
-				return badger.ErrRejected
+				return core.ErrAlreadyExists
 			}
 
 			if !skipTagCopy {
-				// we need to copy the old tags
 				value.Tags = existingParam.Tags
 			}
 
 			newVersion = existingParam.Version + 1
-
-		} else if !errors.Is(err, badger.ErrKeyNotFound) {
-
-			return err
 		}
 
 		value.Version = newVersion
 		paramBytes, err := json.Marshal(value)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to marshal parameter: %w", err)
 		}
 
-		return txn.Set([]byte(key), paramBytes)
+		return b.Put([]byte(key), paramBytes)
 	})
 
 	if err != nil {
-
-		return -1, translateBadgerError(err)
+		if errors.Is(err, core.ErrAlreadyExists) {
+			return -1, core.ErrAlreadyExists
+		}
+		return -1, fmt.Errorf("failed to put parameter %s: %w", key, err)
 	}
 
-	return newVersion, core.ErrNone
+	return newVersion, nil
 }
 
-func (ds *dataStore) encrypt(stringToEncrypt string, keyId string) (string, core.ErrorCode) {
-
-	key, ec := core.FindKeyId(ds.keys, keyId)
-	if ec != core.ErrNone {
-		return "", ec
+func (ds *dataStore) encrypt(stringToEncrypt string, keyId string) (string, error) {
+	key, err := kms.FindKeyId(ds.keys, keyId)
+	if err != nil {
+		return "", err
 	}
 
 	result, err := key.EncryptString(stringToEncrypt, nil)
 	if err != nil {
-		return "", translateBadgerError(err)
+		return "", fmt.Errorf("encryption failed: %w", err)
 	}
 
-	return result, core.ErrNone
+	return result, nil
 }
 
-func (ds *dataStore) decrypt(encryptedString string, keyId string) (string, core.ErrorCode) {
-
-	key, ec := core.FindKeyId(ds.keys, keyId)
-	if ec != core.ErrNone {
-		return "", ec
+func (ds *dataStore) decrypt(encryptedString string, keyId string) (string, error) {
+	key, err := kms.FindKeyId(ds.keys, keyId)
+	if err != nil {
+		return "", err
 	}
 
 	result, err := key.DecryptString(encryptedString, nil)
 	if err != nil {
-		return "", translateBadgerError(err)
+		return "", fmt.Errorf("decryption failed: %w", err)
 	}
 
-	return result, core.ErrNone
-}
-
-func translateBadgerError(err error) core.ErrorCode {
-
-	if errors.Is(err, badger.ErrKeyNotFound) {
-		return ErrParameterNotFound
-	} else if errors.Is(err, badger.ErrRejected) {
-		return ErrParameterAlreadyExists
-	}
-
-	log.Println("An error occurred.", err)
-	return core.ErrInternalError
+	return result, nil
 }
